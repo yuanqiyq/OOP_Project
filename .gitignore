@@ -34,3 +34,9 @@ build/
 
 ### Environment Variables ###
 .env
+.DS_Store
+
+CLAUDE.md
+CLAUDE
+.claude
+QUEUE_IMPLEMENTATION.md
