@@ -7,10 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "patient")
@@ -24,10 +21,6 @@ public class Patient extends User {
     @Column(name = "patient_ic", nullable = true, unique = true)
     @Size(max = 20, message = "Patient IC must not exceed 20 characters")
     private String patientIc;
-    
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
     
     @Column(name = "date_of_birth", nullable = true)
     private LocalDate dateOfBirth;

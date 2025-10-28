@@ -51,6 +51,19 @@ public class UserController {
         }
     }
     
+    // POST /api/users - Create a new user
+    @PostMapping
+    public ResponseEntity<User> createUser(@RequestBody User user) {
+        try {
+            User createdUser = userService.createUser(user);
+            return ResponseEntity.ok(createdUser);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
     // PUT /api/users/{id} - Update user details
     @PutMapping("/{id}")
     public ResponseEntity<User> updateUserDetails(@PathVariable Long id, @RequestBody User updatedUser) {
