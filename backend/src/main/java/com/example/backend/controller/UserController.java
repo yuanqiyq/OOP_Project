@@ -51,6 +51,34 @@ public class UserController {
         }
     }
     
+    // PUT /api/users/{id} - Update user details
+    @PutMapping("/{id}")
+    public ResponseEntity<User> updateUserDetails(@PathVariable Long id, @RequestBody User updatedUser) {
+        try {
+            return userService.updateUserDetails(id, updatedUser)
+                    .map(user -> ResponseEntity.ok(user))
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    // DELETE /api/users/{id} - Delete user by ID
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        try {
+            // Check if user exists before attempting to delete
+            if (userService.getUserById(id).isPresent()) {
+                userService.deleteUser(id);
+                return ResponseEntity.noContent().build();
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
     // Simple health check endpoint
     @GetMapping("/health")
     public ResponseEntity<String> healthCheck() {

@@ -44,6 +44,28 @@ public class UserService {
         return userRepository.save(user);
     }
     
+    // Update user details by ID
+    public Optional<User> updateUserDetails(Long userId, User updatedUser) {
+        return userRepository.findById(userId)
+                .map(existingUser -> {
+                    // Update only the editable fields
+                    if (updatedUser.getEmail() != null) {
+                        existingUser.setEmail(updatedUser.getEmail());
+                    }
+                    if (updatedUser.getFname() != null) {
+                        existingUser.setFname(updatedUser.getFname());
+                    }
+                    if (updatedUser.getLname() != null) {
+                        existingUser.setLname(updatedUser.getLname());
+                    }
+                    if (updatedUser.getRole() != null) {
+                        existingUser.setRole(updatedUser.getRole());
+                    }
+                    // Note: authUuid and createdAt are not updated as they should remain unchanged
+                    return userRepository.save(existingUser);
+                });
+    }
+    
     // Delete user by ID
     public void deleteUser(Long userId) {
         userRepository.deleteById(userId);
