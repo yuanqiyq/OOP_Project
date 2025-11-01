@@ -102,3 +102,26 @@ export const queueAPI = {
   getMissed: (clinicId) => apiCall(`/queue/clinic/${clinicId}/missed`),
 }
 
+// Clinic API
+export const clinicAPI = {
+  getAll: () => apiCall('/clinics'),
+  getById: (id) => apiCall(`/clinics/${id}`),
+  getByRegion: (region) => apiCall(`/clinics/region/${encodeURIComponent(region)}`),
+  getByArea: (area) => apiCall(`/clinics/area/${encodeURIComponent(area)}`),
+  getBySpecialty: (specialty) => apiCall(`/clinics/specialty/${encodeURIComponent(specialty)}`),
+  getByType: (type) => apiCall(`/clinics/type?clinicType=${encodeURIComponent(type)}`),
+  create: (clinic) => apiCall('/clinics', { method: 'POST', body: clinic }),
+  update: (id, clinic) => apiCall(`/clinics/${id}`, { method: 'PUT', body: clinic }),
+  delete: (id) => apiCall(`/clinics/${id}`, { method: 'DELETE' }),
+}
+
+// Doctor API
+export const doctorAPI = {
+  getAll: () => apiCall('/doctors'),
+  getById: (id) => apiCall(`/doctors/${id}`),
+  getByClinic: (clinicId) => apiCall(`/doctors/clinic/${clinicId}`),
+  create: (doctor) => apiCall('/doctors', { method: 'POST', body: doctor }),
+  update: (id, doctor) => apiCall(`/doctors/${id}`, { method: 'PUT', body: doctor }),
+  delete: (id) => apiCall(`/doctors/${id}`, { method: 'DELETE' }),
+}
+

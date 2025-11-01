@@ -5,14 +5,27 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #0f0f1e;
+  color-scheme: light;
+  color: #2d2d2d;
+  background-color: #f8f9fa;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Maroon color palette */
+  --maroon-primary: #8b1538;
+  --maroon-dark: #6b0f2a;
+  --maroon-light: #a8284f;
+  --maroon-accent: #c92a4f;
+  --maroon-glow: rgba(139, 21, 56, 0.3);
+  
+  /* Gradient backgrounds */
+  --gradient-primary: linear-gradient(135deg, #8b1538 0%, #a8284f 50%, #c92a4f 100%);
+  --gradient-soft: linear-gradient(135deg, #f8f9fa 0%, #fff5f7 100%);
+  --gradient-card: linear-gradient(135deg, #ffffff 0%, #fff5f7 100%);
+  --gradient-glow: linear-gradient(135deg, rgba(139, 21, 56, 0.1) 0%, rgba(200, 42, 79, 0.05) 100%);
 }
 
 * {
@@ -25,23 +38,23 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #0f0f1e;
-  color: #e0e0e0;
+  background: var(--gradient-soft);
+  color: #2d2d2d;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--maroon-dark);
 }
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--maroon-primary);
   text-decoration: inherit;
 }
 
 a:hover {
-  color: #535bf2;
+  color: var(--maroon-light);
 }
 
 button {

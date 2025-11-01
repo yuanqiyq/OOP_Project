@@ -46,7 +46,7 @@ function AppRoutes() {
       <Route path="/auth" element={<Navigate to={getDefaultRoute()} replace />} />
       
       <Route
-        path="/patient"
+        path="/patient/*"
         element={
           <ProtectedRoute allowedRoles={['PATIENT']}>
             <PatientView />
@@ -55,7 +55,7 @@ function AppRoutes() {
       />
       
       <Route
-        path="/staff"
+        path="/staff/*"
         element={
           <ProtectedRoute allowedRoles={['STAFF', 'ADMIN']}>
             <StaffView />
@@ -64,7 +64,7 @@ function AppRoutes() {
       />
       
       <Route
-        path="/admin"
+        path="/admin/*"
         element={
           <ProtectedRoute allowedRoles={['ADMIN']}>
             <AdminView />

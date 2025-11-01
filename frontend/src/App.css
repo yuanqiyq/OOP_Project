@@ -1,9 +1,8 @@
 .app {
   min-height: 100vh;
-  background: #0f0f1e;
-  color: #e0e0e0;
+  background: var(--gradient-soft);
 }
 
-* {
-  box-sizing: border-box;
+#root {
+  min-height: 100vh;
 }
