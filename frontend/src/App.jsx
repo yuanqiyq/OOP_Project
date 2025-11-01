@@ -1,34 +1,92 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
+import AuthPage from './pages/AuthPage'
+import PatientView from './pages/PatientView'
+import StaffView from './pages/StaffView'
+import AdminView from './pages/AdminView'
+import UnauthorizedPage from './pages/UnauthorizedPage'
+import LoadingSpinner from './components/LoadingSpinner'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppRoutes() {
+  const { user, userProfile, loading } = useAuth()
+
+  if (loading) {
+    return <LoadingSpinner />
+  }
+
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/auth" element={<AuthPage />} />
+        <Route path="*" element={<Navigate to="/auth" replace />} />
+      </Routes>
+    )
+  }
+
+  // Determine the correct route based on user role
+  const getDefaultRoute = () => {
+    if (!userProfile) return '/auth'
+    
+    switch (userProfile.role) {
+      case 'ADMIN':
+        return '/admin'
+      case 'STAFF':
+        return '/staff'
+      case 'PATIENT':
+        return '/patient'
+      default:
+        return '/auth'
+    }
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <Routes>
+      <Route path="/auth" element={<Navigate to={getDefaultRoute()} replace />} />
+      
+      <Route
+        path="/patient"
+        element={
+          <ProtectedRoute allowedRoles={['PATIENT']}>
+            <PatientView />
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route
+        path="/staff"
+        element={
+          <ProtectedRoute allowedRoles={['STAFF', 'ADMIN']}>
+            <StaffView />
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminView />
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route path="/unauthorized" element={<UnauthorizedPage />} />
+      <Route path="*" element={<Navigate to={getDefaultRoute()} replace />} />
+    </Routes>
+  )
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <div className="app">
+          <AppRoutes />
+        </div>
+      </AuthProvider>
+    </Router>
   )
 }
 

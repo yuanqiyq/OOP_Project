@@ -1,0 +1,150 @@
+.patient-view {
+  min-height: 100vh;
+  background: #0f0f1e;
+  color: #e0e0e0;
+  padding: 2rem;
+}
+
+.view-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #2a2a3e;
+}
+
+.view-header h1 {
+  color: #ffffff;
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.user-info {
+  color: #a0a0b0;
+  font-size: 1rem;
+}
+
+.error-message {
+  background: #4a1e1e;
+  color: #ff6b6b;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid #6a2e2e;
+}
+
+.patient-content {
+  display: grid;
+  gap: 2rem;
+}
+
+.appointments-section,
+.queue-section {
+  background: #1e1e2e;
+  border-radius: 12px;
+  padding: 2rem;
+  border: 1px solid #2a2a3e;
+}
+
+.appointments-section h2,
+.queue-section h2 {
+  color: #ffffff;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+}
+
+.loading {
+  text-align: center;
+  color: #a0a0b0;
+  padding: 2rem;
+}
+
+.empty-state {
+  text-align: center;
+  color: #808080;
+  padding: 2rem;
+}
+
+.appointments-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.appointment-card {
+  background: #2a2a3e;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #3a3a4e;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.appointment-info {
+  flex: 1;
+}
+
+.appointment-info h3 {
+  color: #ffffff;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+}
+
+.appointment-info p {
+  color: #c0c0c0;
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+}
+
+.appointment-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn {
+  padding: 0.625rem 1.25rem;
+  border-radius: 6px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.btn-primary {
+  background: #646cff;
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #535bf2;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #3a3a4e;
+  color: #e0e0e0;
+  border: 1px solid #4a4a5e;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #4a4a5e;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.queue-info {
+  background: #2a2a3e;
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid #3a3a4e;
+}
+
+.queue-info p {
+  color: #e0e0e0;
+  margin: 0.75rem 0;
+  font-size: 1rem;
+}
+

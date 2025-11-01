@@ -1,0 +1,14 @@
+.loading-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f0f1e;
+  color: #e0e0e0;
+}
+
+.loading-spinner {
+  font-size: 1.25rem;
+  color: #a0a0b0;
+}
+
