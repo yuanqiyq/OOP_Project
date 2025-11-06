@@ -1,5 +1,6 @@
 package com.example.backend.service;
 
+import com.example.backend.dto.CreatePatientRequestDTO;
 import com.example.backend.model.Patient;
 import com.example.backend.repo.PatientRepository;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +70,49 @@ public class PatientService {
         
         if (patient.getPatientIc() != null && patientRepository.existsByPatientIc(patient.getPatientIc())) {
             throw new IllegalArgumentException("Patient with IC " + patient.getPatientIc() + " already exists");
+        }
+        
+        return patientRepository.save(patient);
+    }
+    
+    // Create a new patient from DTO
+    public Patient createPatientFromDTO(CreatePatientRequestDTO requestDTO) {
+        // Validate email uniqueness
+        if (patientRepository.existsByEmail(requestDTO.getEmail())) {
+            throw new IllegalArgumentException("Patient with email " + requestDTO.getEmail() + " already exists");
+        }
+        
+        // Validate patient IC uniqueness
+        if (patientRepository.existsByPatientIc(requestDTO.getPatientIc())) {
+            throw new IllegalArgumentException("Patient with IC " + requestDTO.getPatientIc() + " already exists");
+        }
+        
+        // Create new Patient entity
+        Patient patient = new Patient();
+        patient.setAuthUuid(requestDTO.getAuthUuid());
+        patient.setEmail(requestDTO.getEmail());
+        patient.setFname(requestDTO.getFname());
+        patient.setLname(requestDTO.getLname());
+        patient.setRole(requestDTO.getRole());
+        patient.setPatientIc(requestDTO.getPatientIc());
+        patient.setDateOfBirth(requestDTO.getDateOfBirth());
+        patient.setGender(requestDTO.getGender());
+        
+        // Set optional fields if provided
+        if (requestDTO.getEmergencyContact() != null) {
+            patient.setEmergencyContact(requestDTO.getEmergencyContact());
+        }
+        if (requestDTO.getEmergencyContactPhone() != null) {
+            patient.setEmergencyContactPhone(requestDTO.getEmergencyContactPhone());
+        }
+        if (requestDTO.getMedicalHistory() != null) {
+            patient.setMedicalHistory(requestDTO.getMedicalHistory());
+        }
+        if (requestDTO.getAllergies() != null) {
+            patient.setAllergies(requestDTO.getAllergies());
+        }
+        if (requestDTO.getBloodType() != null) {
+            patient.setBloodType(requestDTO.getBloodType());
         }
         
         return patientRepository.save(patient);

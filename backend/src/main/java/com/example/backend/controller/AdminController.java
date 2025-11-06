@@ -4,9 +4,11 @@ import com.example.backend.model.Patient;
 import com.example.backend.model.Staff;
 import com.example.backend.dto.StaffDTO;
 import com.example.backend.dto.CreateStaffRequestDTO;
+import com.example.backend.dto.CreatePatientRequestDTO;
 import com.example.backend.dto.UpdateStaffRequestDTO;
 import com.example.backend.service.PatientService;
 import com.example.backend.service.StaffService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -108,9 +110,9 @@ public class AdminController {
     
     // POST /api/admin/patients - Create a new patient
     @PostMapping("/patients")
-    public ResponseEntity<Patient> createPatient(@RequestBody Patient patient) {
+    public ResponseEntity<Patient> createPatient(@Valid @RequestBody CreatePatientRequestDTO requestDTO) {
         try {
-            Patient createdPatient = patientService.createPatient(patient);
+            Patient createdPatient = patientService.createPatientFromDTO(requestDTO);
             return ResponseEntity.ok(createdPatient);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();
