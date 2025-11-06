@@ -14,12 +14,12 @@ public class SwaggerConfig {
         public OpenAPI customOpenAPI() {
                 return new OpenAPI()
                                 .info(new Info()
-                                                .title("Appointment Management API")
+                                                .title("SingHealth Clinic Queue & Appointment Management API")
                                                 .version("1.0.0")
-                                                .description("API for managing appointments, patients, and doctors")
+                                                .description("API for managing appointments, queue, patients, doctors, and email notifications")
                                                 .contact(new Contact()
-                                                                .name("Your Name")
-                                                                .email("your.email@example.com"))
+                                                                .name("SingHealth Development Team")
+                                                                .email("dev@singhealth-clinic.sg"))
                                                 .license(new License()
                                                                 .name("MIT License")
                                                                 .url("https://opensource.org/licenses/MIT")));
