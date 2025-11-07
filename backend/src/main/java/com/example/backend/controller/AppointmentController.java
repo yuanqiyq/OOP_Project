@@ -19,10 +19,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.backend.dto.CreateAppointmentRequestDTO;
 import com.example.backend.dto.ErrorResponse;
+import com.example.backend.dto.UpdateAppointmentRequestDTO;
 import com.example.backend.exception.DoubleBookingException;
 import com.example.backend.model.appointments.Appointment;
 import com.example.backend.service.AppointmentService;
+
+import jakarta.validation.Valid;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -62,13 +66,14 @@ public class AppointmentController {
 
     // POST /api/appointments - Create new appointment
     @PostMapping
-    public ResponseEntity<?> createAppointment(@RequestBody Appointment appointment) {
+    public ResponseEntity<?> createAppointment(@Valid @RequestBody CreateAppointmentRequestDTO requestDTO) {
         try {
-            // Validate required fields
-            if (appointment.getPatientId() == null || appointment.getClinicId() == null ||
-                    appointment.getDateTime() == null || appointment.getDoctorId() == null) {
-                return ResponseEntity.badRequest().build();
-            }
+            // Create Appointment entity from DTO
+            Appointment appointment = new Appointment();
+            appointment.setPatientId(requestDTO.getPatientId());
+            appointment.setClinicId(requestDTO.getClinicId());
+            appointment.setDoctorId(requestDTO.getDoctorId());
+            appointment.setDateTime(requestDTO.getDateTime().toLocalDateTime());
 
             Appointment createdAppointment = appointmentService.createAppointment(appointment);
             return ResponseEntity.status(HttpStatus.CREATED).body(createdAppointment);
@@ -96,11 +101,41 @@ public class AppointmentController {
 
     // PUT /api/appointments/{id} - Update appointment
     @PutMapping("/{id}")
-    public ResponseEntity<Appointment> updateAppointment(@PathVariable Long id,
-            @RequestBody Appointment appointment) {
+    public ResponseEntity<?> updateAppointment(@PathVariable Long id,
+            @Valid @RequestBody UpdateAppointmentRequestDTO requestDTO) {
         try {
-            return appointmentService.updateAppointment(id, appointment)
-                    .map(updatedAppointment -> ResponseEntity.ok(updatedAppointment))
+            // Get existing appointment
+            return appointmentService.getAppointmentById(id)
+                    .map(existingAppointment -> {
+                        // Check if patientId is being changed - this is not allowed
+                        if (requestDTO.getPatientId() != null &&
+                                !requestDTO.getPatientId().equals(existingAppointment.getPatientId())) {
+                            ErrorResponse errorResponse = new ErrorResponse(
+                                    400,
+                                    "Bad Request",
+                                    "Cannot change patient ID for an existing appointment",
+                                    "/api/appointments/" + id);
+                            return ResponseEntity.badRequest().body(errorResponse);
+                        }
+
+                        // Update only provided fields
+                        if (requestDTO.getClinicId() != null) {
+                            existingAppointment.setClinicId(requestDTO.getClinicId());
+                        }
+                        if (requestDTO.getDoctorId() != null) {
+                            existingAppointment.setDoctorId(requestDTO.getDoctorId());
+                        }
+                        if (requestDTO.getDateTime() != null) {
+                            existingAppointment.setDateTime(requestDTO.getDateTime().toLocalDateTime());
+                        }
+                        if (requestDTO.getApptStatus() != null) {
+                            existingAppointment.setApptStatus(requestDTO.getApptStatus());
+                        }
+
+                        return appointmentService.updateAppointment(id, existingAppointment)
+                                .map(updatedAppointment -> ResponseEntity.ok((Object) updatedAppointment))
+                                .orElse(ResponseEntity.notFound().build());
+                    })
                     .orElse(ResponseEntity.notFound().build());
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
