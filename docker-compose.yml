@@ -1,6 +1,8 @@
 services:
   backend:
-    build: ./backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: clinic-backend
     environment:
       # Database configuration (use your Supabase URL or local postgres)
@@ -23,7 +25,9 @@ services:
       start_period: 40s
 
   frontend:
-    build: ./frontend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: clinic-frontend
     ports:
       - "80:80"
