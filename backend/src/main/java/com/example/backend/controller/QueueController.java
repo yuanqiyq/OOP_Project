@@ -13,9 +13,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.backend.dto.CheckInRequestDTO;
 import com.example.backend.dto.QueueEntryDTO;
 import com.example.backend.dto.QueuePositionDTO;
 import com.example.backend.dto.QueueStatusUpdateDTO;
@@ -57,31 +57,26 @@ public class QueueController {
     /**
      * Check in a patient - create a new queue entry
      *
-     * @param checkInRequest DTO containing appointmentId and priority
+     * @param appointmentId ID of the appointment
+     * @param priority Priority level for queue ordering (1=Normal, 2=Elderly, 3=Emergency)
      * @return ResponseEntity with created QueueLog or error
      *
-     * POST /api/queue/check-in
-     * Request body:
-     * {
-     *   "appointmentId": 1,
-     *   "priority": 1
-     * }
+     * POST /api/queue/check-in?appointmentId=1&priority=1
      */
     @PostMapping("/check-in")
-    public ResponseEntity<?> checkInPatient(@RequestBody CheckInRequestDTO checkInRequest) {
+    public ResponseEntity<?> checkInPatient(
+            @RequestParam Long appointmentId,
+            @RequestParam Integer priority) {
         try {
             // Validate request
-            if (checkInRequest.getAppointmentId() == null || checkInRequest.getPriority() == null) {
+            if (appointmentId == null || priority == null) {
                 return ResponseEntity.badRequest()
                     .body(new ErrorResponse(400, "Bad Request",
                         "appointmentId and priority are required"));
             }
 
             // Create queue entry
-            QueueLog queueEntry = queueService.checkInPatient(
-                checkInRequest.getAppointmentId(),
-                checkInRequest.getPriority()
-            );
+            QueueLog queueEntry = queueService.checkInPatient(appointmentId, priority);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(queueEntry);
 

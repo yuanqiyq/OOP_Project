@@ -5,6 +5,7 @@ import com.example.backend.model.clinic.Clinic;
 import com.example.backend.dto.CreateStaffRequestDTO;
 import com.example.backend.dto.UpdateStaffRequestDTO;
 import com.example.backend.repo.StaffRepository;
+import com.example.backend.service.ClinicService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -14,8 +15,9 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class StaffService {
-    
+
     private final StaffRepository staffRepository;
+    private final ClinicService clinicService;
     
     // Get all staff
     public List<Staff> getAllStaff() {
@@ -208,12 +210,14 @@ public class StaffService {
     
     // Transfer staff to different clinic
     public Optional<Staff> transferStaffToClinic(Long staffId, Long newClinicId) {
+        // Validate that the new clinic exists
+        Clinic newClinic = clinicService.getClinicById(newClinicId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Clinic with ID " + newClinicId + " not found"));
+
         return staffRepository.findById(staffId)
                 .map(staff -> {
-                    // Note: This assumes you have a way to get Clinic by ID
-                    // You might need to inject ClinicRepository or ClinicService
-                    // For now, we'll just update the clinic ID
-                    // staff.getClinic().setId(newClinicId);
+                    staff.setClinic(newClinic);
                     return staffRepository.save(staff);
                 });
     }

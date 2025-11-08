@@ -83,9 +83,8 @@ export const appointmentAPI = {
 
 // Queue API
 export const queueAPI = {
-  checkIn: (appointmentId, priority = 1) => apiCall('/queue/check-in', {
+  checkIn: (appointmentId, priority = 1) => apiCall(`/queue/check-in?appointmentId=${appointmentId}&priority=${priority}`, {
     method: 'POST',
-    body: { appointmentId, priority },
   }),
   getClinicQueue: (clinicId) => apiCall(`/queue/clinic/${clinicId}`),
   getQueuePosition: (appointmentId) => apiCall(`/queue/position/${appointmentId}`),
