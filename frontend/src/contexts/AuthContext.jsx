@@ -65,6 +65,7 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, userData) => {
     try {
+      // Step 1: Create auth account
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -73,47 +74,30 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error
 
       if (data.user) {
-        // Create user in backend
+        // Step 2: Create patient record in backend using the patient endpoint
         try {
-          // If patient, create Patient record directly (Patient extends User)
-          if (userData.role === 'PATIENT' || !userData.role) {
-            try {
-              const { adminAPI } = await import('../lib/api')
-              await adminAPI.createPatient({
-                authUuid: data.user.id,
-                email: data.user.email,
-                fname: userData.fname,
-                lname: userData.lname,
-                role: 'PATIENT',
-                // Patient-specific fields (can be added later via update)
-                patientIc: null,
-                dateOfBirth: null,
-                gender: null,
-              })
-            } catch (patientError) {
-              console.error('Error creating patient record:', patientError)
-              // Fallback: create user record if patient creation fails
-              await userAPI.create({
-                authUuid: data.user.id,
-                email: data.user.email,
-                fname: userData.fname,
-                lname: userData.lname,
-                role: 'PATIENT',
-              })
-            }
-          } else {
-            // For non-patient users, create User record
-            await userAPI.create({
-              authUuid: data.user.id,
-              email: data.user.email,
-              fname: userData.fname,
-              lname: userData.lname,
-              role: userData.role || 'PATIENT',
-            })
+          const { adminAPI } = await import('../lib/api')
+          
+          // Format dateOfBirth to YYYY-MM-DD if it's not already in that format
+          let formattedDateOfBirth = userData.dateOfBirth
+          if (formattedDateOfBirth && formattedDateOfBirth.includes('T')) {
+            formattedDateOfBirth = formattedDateOfBirth.split('T')[0]
           }
+          
+          await adminAPI.createPatient({
+            authUuid: data.user.id,
+            email: data.user.email,
+            fname: userData.fname,
+            lname: userData.lname,
+            role: 'PATIENT',
+            patientIc: userData.patientIc,
+            dateOfBirth: formattedDateOfBirth,
+            gender: userData.gender,
+          })
         } catch (backendError) {
-          console.error('Error creating user in backend:', backendError)
-          // If backend creation fails, we still have the auth user
+          console.error('Error creating patient record:', backendError)
+          // If patient creation fails, throw error so user knows signup failed
+          throw new Error(backendError.message || 'Failed to create patient account')
         }
         
         await fetchUserProfile(data.user.id)

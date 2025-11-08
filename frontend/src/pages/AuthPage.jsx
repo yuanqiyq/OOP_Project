@@ -8,10 +8,24 @@ export default function AuthPage() {
   const [password, setPassword] = useState('')
   const [fname, setFname] = useState('')
   const [lname, setLname] = useState('')
+  const [patientIc, setPatientIc] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [gender, setGender] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const { signIn, signUp } = useAuth()
+
+  const resetForm = () => {
+    setEmail('')
+    setPassword('')
+    setFname('')
+    setLname('')
+    setPatientIc('')
+    setDateOfBirth('')
+    setGender('')
+    setError('')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -24,13 +38,16 @@ export default function AuthPage() {
         if (error) throw error
       } else {
         // Sign up - only for patients
-        if (!fname || !lname) {
-          throw new Error('First name and last name are required')
+        if (!fname || !lname || !patientIc || !dateOfBirth || !gender) {
+          throw new Error('All fields are required')
         }
         const { error } = await signUp(email, password, {
           fname,
           lname,
           role: 'PATIENT',
+          patientIc,
+          dateOfBirth,
+          gender,
         })
         if (error) throw error
       }
@@ -58,27 +75,69 @@ export default function AuthPage() {
         <form onSubmit={handleSubmit} className="auth-form">
           {!isLogin && (
             <>
-              <div className="form-group">
-                <label htmlFor="fname">First Name</label>
-                <input
-                  id="fname"
-                  type="text"
-                  value={fname}
-                  onChange={(e) => setFname(e.target.value)}
-                  required={!isLogin}
-                  disabled={loading}
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="fname">First Name</label>
+                  <input
+                    id="fname"
+                    type="text"
+                    value={fname}
+                    onChange={(e) => setFname(e.target.value)}
+                    required={!isLogin}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lname">Last Name</label>
+                  <input
+                    id="lname"
+                    type="text"
+                    value={lname}
+                    onChange={(e) => setLname(e.target.value)}
+                    required={!isLogin}
+                    disabled={loading}
+                  />
+                </div>
               </div>
               <div className="form-group">
-                <label htmlFor="lname">Last Name</label>
+                <label htmlFor="patientIc">IC Number</label>
                 <input
-                  id="lname"
+                  id="patientIc"
                   type="text"
-                  value={lname}
-                  onChange={(e) => setLname(e.target.value)}
+                  value={patientIc}
+                  onChange={(e) => setPatientIc(e.target.value)}
                   required={!isLogin}
                   disabled={loading}
+                  placeholder="e.g., 123456789012"
                 />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="dateOfBirth">Date of Birth</label>
+                  <input
+                    id="dateOfBirth"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    required={!isLogin}
+                    disabled={loading}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="gender">Gender</label>
+                  <select
+                    id="gender"
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    required={!isLogin}
+                    disabled={loading}
+                  >
+                    <option value="">Select gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
             </>
           )}
@@ -119,7 +178,10 @@ export default function AuthPage() {
               Don't have an account?{' '}
               <button
                 type="button"
-                onClick={() => setIsLogin(false)}
+                onClick={() => {
+                  resetForm()
+                  setIsLogin(false)
+                }}
                 className="auth-link"
               >
                 Sign up as a patient
@@ -130,7 +192,10 @@ export default function AuthPage() {
               Already have an account?{' '}
               <button
                 type="button"
-                onClick={() => setIsLogin(true)}
+                onClick={() => {
+                  resetForm()
+                  setIsLogin(true)
+                }}
                 className="auth-link"
               >
                 Sign in
