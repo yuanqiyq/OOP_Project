@@ -1,6 +1,10 @@
 package com.example.backend.model;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,6 +40,10 @@ public class Doctor {
 
     @Column(name = "assigned_clinic", nullable = false)
     private Long assignedClinic;
+
+    @Column(name = "shift_days", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private List<Integer> shiftDays;
 
     @PrePersist
     protected void onCreate() {

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.backend.dto.ErrorResponse;
+import com.example.backend.exception.ShiftOverlapException;
 import com.example.backend.model.Doctor;
 import com.example.backend.service.DoctorService;
 
@@ -100,6 +101,13 @@ public class DoctorController {
                     e.getMessage(),
                     "/api/doctors");
             return ResponseEntity.badRequest().body(errorResponse);
+        } catch (ShiftOverlapException e) {
+            ErrorResponse errorResponse = new ErrorResponse(
+                    409,
+                    "Conflict",
+                    e.getMessage(),
+                    "/api/doctors");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
         } catch (Exception e) {
             // Log the actual error for debugging
             System.err.println("Error creating doctor: " + e.getClass().getName() + " - " + e.getMessage());
@@ -121,6 +129,20 @@ public class DoctorController {
             return doctorService.updateDoctor(id, doctor)
                     .map(updatedDoctor -> ResponseEntity.ok(updatedDoctor))
                     .orElse(ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException e) {
+            ErrorResponse errorResponse = new ErrorResponse(
+                    400,
+                    "Bad Request",
+                    e.getMessage(),
+                    "/api/doctors/" + id);
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (ShiftOverlapException e) {
+            ErrorResponse errorResponse = new ErrorResponse(
+                    409,
+                    "Conflict",
+                    e.getMessage(),
+                    "/api/doctors/" + id);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
         } catch (Exception e) {
             ErrorResponse errorResponse = new ErrorResponse(
                     500,

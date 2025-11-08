@@ -1,10 +1,13 @@
 package com.example.backend.service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
+import com.example.backend.exception.ShiftOverlapException;
 import com.example.backend.model.Doctor;
 import com.example.backend.repo.DoctorRepository;
 
@@ -29,6 +32,12 @@ public class DoctorService {
             throw new IllegalArgumentException("Doctor assigned clinic is required");
         }
 
+        // Validate shift_days if provided
+        if (doctor.getShiftDays() != null && !doctor.getShiftDays().isEmpty()) {
+            validateShiftDays(doctor.getShiftDays());
+            checkShiftOverlap(doctor.getAssignedClinic(), doctor.getShiftDays(), null);
+        }
+
         return doctorRepository.save(doctor);
     }
 
@@ -51,6 +60,23 @@ public class DoctorService {
     public Optional<Doctor> updateDoctor(Long id, Doctor updatedDoctor) {
         return doctorRepository.findById(id)
                 .map(existingDoctor -> {
+                    // Determine the clinic to check (use updated clinic if provided, otherwise existing)
+                    Long clinicToCheck = updatedDoctor.getAssignedClinic() != null 
+                            ? updatedDoctor.getAssignedClinic() 
+                            : existingDoctor.getAssignedClinic();
+                    
+                    // Determine the shift days to check (use updated shift days if provided, otherwise existing)
+                    List<Integer> shiftDaysToCheck = updatedDoctor.getShiftDays() != null 
+                            ? updatedDoctor.getShiftDays() 
+                            : existingDoctor.getShiftDays();
+
+                    // Validate shift_days if provided or if clinic is being changed
+                    if (shiftDaysToCheck != null && !shiftDaysToCheck.isEmpty()) {
+                        validateShiftDays(shiftDaysToCheck);
+                        // Check overlap excluding the current doctor being updated
+                        checkShiftOverlap(clinicToCheck, shiftDaysToCheck, id);
+                    }
+
                     // Update fields
                     if (updatedDoctor.getFname() != null) {
                         existingDoctor.setFname(updatedDoctor.getFname());
@@ -60,6 +86,9 @@ public class DoctorService {
                     }
                     if (updatedDoctor.getAssignedClinic() != null) {
                         existingDoctor.setAssignedClinic(updatedDoctor.getAssignedClinic());
+                    }
+                    if (updatedDoctor.getShiftDays() != null) {
+                        existingDoctor.setShiftDays(updatedDoctor.getShiftDays());
                     }
 
                     return doctorRepository.save(existingDoctor);
@@ -73,5 +102,65 @@ public class DoctorService {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Validates that shift_days contains only integers in the range 1-7
+     */
+    private void validateShiftDays(List<Integer> shiftDays) {
+        if (shiftDays == null) {
+            return;
+        }
+        
+        for (Integer day : shiftDays) {
+            if (day == null || day < 1 || day > 7) {
+                throw new IllegalArgumentException(
+                    "Shift days must contain integers between 1 and 7 (representing days of the week). Invalid value: " + day);
+            }
+        }
+    }
+
+    /**
+     * Checks if the given shift_days overlap with any existing doctor's shift_days in the same clinic
+     * @param clinicId The clinic ID to check
+     * @param newShiftDays The shift days to validate
+     * @param excludeDoctorId The doctor ID to exclude from the check (null for create operations)
+     */
+    private void checkShiftOverlap(Long clinicId, List<Integer> newShiftDays, Long excludeDoctorId) {
+        if (newShiftDays == null || newShiftDays.isEmpty()) {
+            return; // No shift days means no overlap possible
+        }
+
+        // Get all doctors in the same clinic
+        List<Doctor> doctorsInClinic = doctorRepository.findByAssignedClinic(clinicId);
+        
+        // Convert new shift days to a set for efficient lookup
+        Set<Integer> newShiftDaysSet = new HashSet<>(newShiftDays);
+
+        // Check each doctor's shift days for overlaps
+        for (Doctor existingDoctor : doctorsInClinic) {
+            // Skip the doctor being updated
+            if (excludeDoctorId != null && existingDoctor.getId().equals(excludeDoctorId)) {
+                continue;
+            }
+
+            // Skip doctors without shift days
+            if (existingDoctor.getShiftDays() == null || existingDoctor.getShiftDays().isEmpty()) {
+                continue;
+            }
+
+            // Check for any overlapping days
+            Set<Integer> existingShiftDaysSet = new HashSet<>(existingDoctor.getShiftDays());
+            Set<Integer> overlap = new HashSet<>(newShiftDaysSet);
+            overlap.retainAll(existingShiftDaysSet);
+
+            if (!overlap.isEmpty()) {
+                String doctorName = existingDoctor.getFname() + " " + existingDoctor.getLname();
+                throw new ShiftOverlapException(
+                    String.format("Shift days overlap detected. Doctor '%s' (ID: %d) already works on day(s) %s. " +
+                        "No two doctors can work on the same shift in the same clinic.",
+                        doctorName, existingDoctor.getId(), overlap));
+            }
+        }
     }
 }
