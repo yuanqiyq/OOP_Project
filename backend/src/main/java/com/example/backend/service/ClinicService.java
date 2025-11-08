@@ -130,6 +130,9 @@ public class ClinicService {
                     if (updatedClinic.getRemarks() != null) {
                         existingClinic.setRemarks(updatedClinic.getRemarks());
                     }
+                    if (updatedClinic.getApptIntervalMin() != null) {
+                        existingClinic.setApptIntervalMin(updatedClinic.getApptIntervalMin());
+                    }
 
                     // @PreUpdate will automatically set updatedAt
                     return clinicRepository.save(existingClinic);

@@ -92,6 +92,9 @@ public class Clinic {
     @Column(name = "remarks", length = 255)
     private String remarks;
 
+    @Column(name = "appt_interval_min", nullable = false)
+    private Long apptIntervalMin;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -105,6 +108,9 @@ public class Clinic {
         }
         if (updatedAt == null) {
             updatedAt = LocalDateTime.now();
+        }
+        if (apptIntervalMin == null) {
+            apptIntervalMin = 15L;
         }
     }
 
