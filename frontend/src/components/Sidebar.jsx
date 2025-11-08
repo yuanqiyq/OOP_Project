@@ -10,6 +10,7 @@ export default function Sidebar() {
 
   const patientMenu = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', path: '/patient' },
+    { id: 'book-appointment', label: 'Book Appointment', icon: '➕', path: '/patient/book' },
     { id: 'appointments', label: 'My Appointments', icon: '📅', path: '/patient/appointments' },
     { id: 'queue', label: 'Queue Status', icon: '⏳', path: '/patient/queue' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/patient/settings' },
@@ -55,7 +56,7 @@ export default function Sidebar() {
         {menu.map((item) => {
           const isActive = currentPath === item.path || 
             (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
-             currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') ||
+             currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') && !currentPath.includes('/book') ||
              currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/settings') ||
              currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/queue') && !currentPath.includes('/appointments') && !currentPath.includes('/settings'))) ||
             (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
