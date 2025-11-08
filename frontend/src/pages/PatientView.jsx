@@ -211,6 +211,44 @@ export default function PatientView() {
     }
   }, [])
 
+  // Auto-populate doctor when date is selected (only if no doctor selected or current doctor doesn't work that day)
+  useEffect(() => {
+    if (selectedDate && selectedClinic && showBookingModal) {
+      const dayOfWeek = getDayOfWeek(selectedDate)
+      // If a doctor is selected but doesn't work on this day, clear it
+      if (selectedDoctor && (!selectedDoctor.shiftDays || !selectedDoctor.shiftDays.includes(dayOfWeek))) {
+        setSelectedDoctor(null)
+      }
+      // If no doctor selected, auto-select first available
+      if (!selectedDoctor) {
+        const availableDoctors = getDoctorsForDate(selectedDate, selectedClinic.id)
+        if (availableDoctors.length > 0) {
+          setSelectedDoctor(availableDoctors[0])
+        }
+      }
+    }
+  }, [selectedDate, selectedClinic, showBookingModal]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-populate date when doctor is selected (only if no date selected or current date doesn't match)
+  useEffect(() => {
+    if (selectedDoctor && selectedClinic && showBookingModal) {
+      const dayOfWeek = selectedDate ? getDayOfWeek(selectedDate) : null
+      // If a date is selected but doctor doesn't work that day, clear it
+      if (selectedDate && (!selectedDoctor.shiftDays || !selectedDoctor.shiftDays.includes(dayOfWeek))) {
+        setSelectedDate('')
+        setSelectedTimeSlot(null)
+        setTimeSlots([])
+      }
+      // If no date selected, auto-select first available
+      if (!selectedDate) {
+        const availableDates = getAvailableDatesForDoctor(selectedDoctor)
+        if (availableDates.length > 0) {
+          setSelectedDate(availableDates[0])
+        }
+      }
+    }
+  }, [selectedDoctor, selectedClinic, showBookingModal]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Generate time slots when clinic and date are selected
   useEffect(() => {
     if (selectedClinic && selectedDate && showBookingModal) {
@@ -591,11 +629,21 @@ export default function PatientView() {
 
       const appointmentDateTime = new Date(selectedTimeSlot.datetime)
       
+      // Format as local date-time string without timezone conversion
+      // Format: YYYY-MM-DDTHH:mm:ss (no timezone info)
+      const year = appointmentDateTime.getFullYear()
+      const month = String(appointmentDateTime.getMonth() + 1).padStart(2, '0')
+      const day = String(appointmentDateTime.getDate()).padStart(2, '0')
+      const hours = String(appointmentDateTime.getHours()).padStart(2, '0')
+      const minutes = String(appointmentDateTime.getMinutes()).padStart(2, '0')
+      const seconds = String(appointmentDateTime.getSeconds()).padStart(2, '0')
+      const localDateTimeString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+      
       const newAppointment = await appointmentAPI.create({
         patientId: userProfile.userId,
         clinicId: selectedClinic.id,
         doctorId: selectedDoctor.id,
-        dateTime: appointmentDateTime.toISOString(),
+        dateTime: localDateTimeString,
         apptStatus: 'SCHEDULED'
       })
 
@@ -616,6 +664,103 @@ export default function PatientView() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Helper function to get day of week (1=Monday, 7=Sunday)
+  const getDayOfWeek = (dateString) => {
+    if (!dateString) return null
+    const date = new Date(dateString + 'T00:00:00')
+    // JavaScript getDay() returns 0=Sunday, 1=Monday, etc.
+    // Convert to 1=Monday, 7=Sunday
+    const day = date.getDay()
+    return day === 0 ? 7 : day
+  }
+
+  // Helper function to get available dates for a doctor (next 30 days when they work)
+  const getAvailableDatesForDoctor = (doctor) => {
+    if (!doctor || !doctor.shiftDays || doctor.shiftDays.length === 0) {
+      return []
+    }
+
+    const dates = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    // Get next 30 days
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today)
+      date.setDate(today.getDate() + i)
+      const dayOfWeek = getDayOfWeek(date.toISOString().split('T')[0])
+      
+      if (doctor.shiftDays.includes(dayOfWeek)) {
+        dates.push(date.toISOString().split('T')[0])
+      }
+    }
+    
+    return dates
+  }
+
+  // Helper function to filter doctors by date
+  const getDoctorsForDate = (dateString, clinicId) => {
+    if (!dateString) return []
+    
+    const dayOfWeek = getDayOfWeek(dateString)
+    return doctors.filter(d => {
+      if (d.assignedClinic !== clinicId) return false
+      if (!d.shiftDays || d.shiftDays.length === 0) return false
+      return d.shiftDays.includes(dayOfWeek)
+    })
+  }
+
+  // Helper function to format opening hours
+  const formatOpeningHours = (clinic) => {
+    if (!clinic) return null
+
+    const formatTime = (timeStr) => {
+      if (!timeStr) return null
+      // Handle both "HH:mm:ss" and "HH:mm" formats
+      const time = timeStr.split(':')
+      if (time.length < 2) return null
+      const hours = parseInt(time[0], 10)
+      const minutes = time[1] || '00'
+      if (isNaN(hours)) return null
+      const period = hours >= 12 ? 'PM' : 'AM'
+      const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+      return `${displayHours}:${minutes} ${period}`
+    }
+
+    const hours = []
+
+    // Monday-Friday
+    if (clinic.monFriAmStart || clinic.monFriPmStart) {
+      const monFriHours = []
+      if (clinic.monFriAmStart && clinic.monFriAmEnd) {
+        monFriHours.push(`${formatTime(clinic.monFriAmStart)} - ${formatTime(clinic.monFriAmEnd)}`)
+      }
+      if (clinic.monFriPmStart && clinic.monFriPmEnd) {
+        monFriHours.push(`${formatTime(clinic.monFriPmStart)} - ${formatTime(clinic.monFriPmEnd)}`)
+      }
+      if (monFriHours.length > 0) {
+        hours.push({ day: 'Mon - Fri', times: monFriHours.join(', ') })
+      }
+    }
+
+    // Saturday
+    if (clinic.satAmStart && clinic.satAmEnd) {
+      hours.push({ day: 'Saturday', times: `${formatTime(clinic.satAmStart)} - ${formatTime(clinic.satAmEnd)}` })
+    }
+
+    // Sunday
+    if (clinic.sunAmStart && clinic.sunAmEnd) {
+      hours.push({ day: 'Sunday', times: `${formatTime(clinic.sunAmStart)} - ${formatTime(clinic.sunAmEnd)}` })
+    }
+
+    // Public Holiday
+    if (clinic.phAmStart && clinic.phAmEnd) {
+      hours.push({ day: 'Public Holiday', times: `${formatTime(clinic.phAmStart)} - ${formatTime(clinic.phAmEnd)}` })
+    }
+
+    return hours.length > 0 ? hours : null
   }
 
   const currentView = getCurrentView()
@@ -1104,6 +1249,19 @@ export default function PatientView() {
                                 <strong>Distance:</strong> {clinic.distance.toFixed(2)} km away
                               </p>
                             )}
+                            {formatOpeningHours(clinic) && (
+                              <div className="opening-hours">
+                                <p><strong>Opening Hours:</strong></p>
+                                <div className="opening-hours-list">
+                                  {formatOpeningHours(clinic).map((schedule, index) => (
+                                    <div key={index} className="opening-hours-item">
+                                      <span className="opening-hours-day">{schedule.day}:</span>
+                                      <span className="opening-hours-time">{schedule.times}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1150,44 +1308,165 @@ export default function PatientView() {
                         <div className="booking-form-row">
                           <div className="form-group">
                             <label>Date</label>
-                            <input
-                              type="date"
-                              value={selectedDate}
-                              onChange={(e) => {
-                                setSelectedDate(e.target.value)
-                                setSelectedTimeSlot(null)
-                                setTimeSlots([])
-                              }}
-                              min={new Date().toISOString().split('T')[0]}
-                              className="input-sm"
-                            />
+                            <div className="input-with-clear">
+                              {selectedDoctor ? (
+                                // Show dropdown of available dates when doctor is selected
+                                (() => {
+                                  const availableDates = getAvailableDatesForDoctor(selectedDoctor)
+                                  return availableDates.length === 0 ? (
+                                    <div className="empty-state">
+                                      <p>No available dates for this doctor in the next 30 days</p>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <select
+                                        value={selectedDate || ''}
+                                        onChange={(e) => {
+                                          setSelectedDate(e.target.value)
+                                          setSelectedTimeSlot(null)
+                                          setTimeSlots([])
+                                        }}
+                                        className="input-sm"
+                                      >
+                                        <option value="">Select a date</option>
+                                        {availableDates.map((date) => {
+                                          const dateObj = new Date(date + 'T00:00:00')
+                                          const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                                            weekday: 'short', 
+                                            year: 'numeric', 
+                                            month: 'short', 
+                                            day: 'numeric' 
+                                          })
+                                          return (
+                                            <option key={date} value={date}>
+                                              {formattedDate}
+                                            </option>
+                                          )
+                                        })}
+                                      </select>
+                                      {selectedDate && (
+                                        <button
+                                          type="button"
+                                          className="clear-input-btn"
+                                          onClick={() => {
+                                            setSelectedDate('')
+                                            setSelectedTimeSlot(null)
+                                            setTimeSlots([])
+                                          }}
+                                          title="Clear date"
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </>
+                                  )
+                                })()
+                              ) : (
+                                // Show date input when no doctor is selected
+                                <>
+                                  <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) => {
+                                      setSelectedDate(e.target.value)
+                                      setSelectedTimeSlot(null)
+                                      setTimeSlots([])
+                                      // Clear doctor if selected date doesn't match their shift
+                                      if (selectedDoctor) {
+                                        const dayOfWeek = getDayOfWeek(e.target.value)
+                                        if (!selectedDoctor.shiftDays || !selectedDoctor.shiftDays.includes(dayOfWeek)) {
+                                          setSelectedDoctor(null)
+                                        }
+                                      }
+                                    }}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="input-sm"
+                                  />
+                                  {selectedDate && (
+                                    <button
+                                      type="button"
+                                      className="clear-input-btn"
+                                      onClick={() => {
+                                        setSelectedDate('')
+                                        setSelectedTimeSlot(null)
+                                        setTimeSlots([])
+                                        setSelectedDoctor(null)
+                                      }}
+                                      title="Clear date"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
                           <div className="form-group">
                             <label>Doctor</label>
-                            {doctors.filter(d => !selectedClinic || d.assignedClinic === selectedClinic.id).length === 0 ? (
-                              <div className="empty-state">
-                                <p>No doctors available at this clinic</p>
-                              </div>
-                            ) : (
-                              <select
-                                value={selectedDoctor?.id || ''}
-                                onChange={(e) => {
-                                  const doctorId = Number(e.target.value)
-                                  const doctor = doctors.find(d => d.id === doctorId)
-                                  setSelectedDoctor(doctor || null)
-                                }}
-                                className="input-sm"
-                              >
-                                <option value="">Select a doctor</option>
-                                {doctors
-                                  .filter(d => !selectedClinic || d.assignedClinic === selectedClinic.id)
-                                  .map((doctor) => (
-                                    <option key={doctor.id} value={doctor.id}>
-                                      Dr. {doctor.fname} {doctor.lname}
-                                    </option>
-                                  ))}
-                              </select>
-                            )}
+                            <div className="input-with-clear">
+                              {(() => {
+                                // Filter doctors based on selected date or show all if no date selected
+                                const availableDoctors = selectedDate 
+                                  ? getDoctorsForDate(selectedDate, selectedClinic.id)
+                                  : doctors.filter(d => !selectedClinic || d.assignedClinic === selectedClinic.id)
+                                
+                                return availableDoctors.length === 0 ? (
+                                  <div className="empty-state">
+                                    <p>
+                                      {selectedDate 
+                                        ? 'No doctors available on this date' 
+                                        : 'No doctors available at this clinic'}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <select
+                                      value={selectedDoctor?.id || ''}
+                                      onChange={(e) => {
+                                        const doctorId = Number(e.target.value)
+                                        const doctor = doctors.find(d => d.id === doctorId)
+                                        setSelectedDoctor(doctor || null)
+                                        // Clear date if selected doctor doesn't work on that day
+                                        if (selectedDate && doctor) {
+                                          const dayOfWeek = getDayOfWeek(selectedDate)
+                                          if (!doctor.shiftDays || !doctor.shiftDays.includes(dayOfWeek)) {
+                                            setSelectedDate('')
+                                            setSelectedTimeSlot(null)
+                                            setTimeSlots([])
+                                          }
+                                        }
+                                      }}
+                                      disabled={!!selectedDate}
+                                      className="input-sm"
+                                    >
+                                      <option value="">Select a doctor</option>
+                                      {availableDoctors.map((doctor) => (
+                                        <option key={doctor.id} value={doctor.id}>
+                                          Dr. {doctor.fname} {doctor.lname}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {selectedDoctor && (
+                                      <button
+                                        type="button"
+                                        className="clear-input-btn"
+                                        onClick={() => {
+                                          setSelectedDoctor(null)
+                                          if (selectedDate) {
+                                            setSelectedDate('')
+                                            setSelectedTimeSlot(null)
+                                            setTimeSlots([])
+                                          }
+                                        }}
+                                        title="Clear doctor"
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </>
+                                )
+                              })()}
+                            </div>
                           </div>
                         </div>
                       </div>

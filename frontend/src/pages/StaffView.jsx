@@ -16,6 +16,7 @@ export default function StaffView() {
   const [missed, setMissed] = useState([])
   const [appointments, setAppointments] = useState([])
   const [doctors, setDoctors] = useState([])
+  const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -43,6 +44,7 @@ export default function StaffView() {
       fetchMissed()
       fetchAppointments()
       fetchDoctors()
+      fetchPatients()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinicId])
@@ -116,6 +118,15 @@ export default function StaffView() {
       setMissed(data.missedPatients || [])
     } catch (err) {
       console.error('Failed to fetch missed patients', err)
+    }
+  }
+
+  const fetchPatients = async () => {
+    try {
+      const data = await adminAPI.getPatients()
+      setPatients(data || [])
+    } catch (err) {
+      console.error('Failed to fetch patients', err)
     }
   }
 
@@ -576,20 +587,78 @@ export default function StaffView() {
                       <thead>
                         <tr>
                           <th>ID</th>
-                          <th>Patient ID</th>
-                          <th>Doctor ID</th>
+                          <th>Patient Name</th>
+                          <th>Doctor Name</th>
                           <th>Date & Time</th>
                           <th>Status</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {appointments.map((apt) => (
+                        {appointments.map((apt) => {
+                          // Find patient name
+                          const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
+                          const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
+                          
+                          // Find doctor name
+                          const doctor = doctors.find(d => d.id === apt.doctorId)
+                          const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                          
+                          // Format date and time properly (avoid timezone issues)
+                          // Parse the date string directly to avoid timezone conversion
+                          let formattedDate, formattedTime
+                          if (typeof apt.dateTime === 'string') {
+                            // Parse ISO format string directly (e.g., "2025-11-09T09:15:00")
+                            const dateMatch = apt.dateTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+                            if (dateMatch) {
+                              const [, year, month, day, hour, minute] = dateMatch
+                              const monthNum = parseInt(month, 10)
+                              const dayNum = parseInt(day, 10)
+                              const hourNum = parseInt(hour, 10)
+                              const minuteNum = parseInt(minute, 10)
+                              
+                              // Format date
+                              formattedDate = `${monthNum}/${dayNum}/${year}`
+                              
+                              // Format time
+                              const period = hourNum >= 12 ? 'PM' : 'AM'
+                              const displayHours = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum
+                              formattedTime = `${displayHours}:${minuteNum.toString().padStart(2, '0')} ${period}`
+                            } else {
+                              // Fallback to Date object parsing
+                              const dateTime = new Date(apt.dateTime)
+                              formattedDate = dateTime.toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'numeric', 
+                                day: 'numeric' 
+                              })
+                              const hours = dateTime.getHours()
+                              const minutes = dateTime.getMinutes()
+                              const period = hours >= 12 ? 'PM' : 'AM'
+                              const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+                              formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+                            }
+                          } else {
+                            // If it's already a Date object or number
+                            const dateTime = new Date(apt.dateTime)
+                            formattedDate = dateTime.toLocaleDateString('en-US', { 
+                              year: 'numeric', 
+                              month: 'numeric', 
+                              day: 'numeric' 
+                            })
+                            const hours = dateTime.getHours()
+                            const minutes = dateTime.getMinutes()
+                            const period = hours >= 12 ? 'PM' : 'AM'
+                            const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+                            formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+                          }
+                          
+                          return (
                           <tr key={apt.appointmentId}>
                             <td>#{apt.appointmentId}</td>
-                            <td>{apt.patientId}</td>
-                            <td>{apt.doctorId || 'N/A'}</td>
-                            <td>{new Date(apt.dateTime).toLocaleString()}</td>
+                            <td>{patientName}</td>
+                            <td>{doctorName}</td>
+                            <td>{formattedDate}, {formattedTime}</td>
                             <td>
                               <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
                                 {apt.apptStatus || 'PENDING'}
@@ -629,7 +698,8 @@ export default function StaffView() {
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
