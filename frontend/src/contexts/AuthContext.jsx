@@ -32,25 +32,37 @@ export const AuthProvider = ({ children }) => {
     })
 
     // Listen for auth changes
+    let isRestoringSession = false
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       // If we're ignoring auth changes (during user creation), restore original session
-      if (ignoreAuthChangesRef.current && originalSessionRef.current) {
-        // Restore the original session
-        await supabase.auth.setSession({
-          access_token: originalSessionRef.current.access_token,
-          refresh_token: originalSessionRef.current.refresh_token,
-        })
+      if (ignoreAuthChangesRef.current && originalSessionRef.current && !isRestoringSession) {
+        isRestoringSession = true
+        try {
+          // Restore the original session
+          await supabase.auth.setSession({
+            access_token: originalSessionRef.current.access_token,
+            refresh_token: originalSessionRef.current.refresh_token,
+          })
+        } finally {
+          // Reset flag after a short delay to prevent immediate re-trigger
+          setTimeout(() => {
+            isRestoringSession = false
+          }, 1000)
+        }
         return
       }
 
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        await fetchUserProfile(session.user.id)
-      } else {
-        setUserProfile(null)
-        setLoading(false)
+      // Only process auth changes if we're not restoring
+      if (!isRestoringSession) {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          await fetchUserProfile(session.user.id)
+        } else {
+          setUserProfile(null)
+          setLoading(false)
+        }
       }
     })
 

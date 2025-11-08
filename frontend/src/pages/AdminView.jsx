@@ -200,6 +200,9 @@ export default function AdminView() {
         refresh_token: currentSession.refresh_token,
       })
 
+      // Small delay to ensure session is restored before proceeding
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       await adminAPI.createStaff({
         authUuid: authData.user.id,
         email: staffFormData.email,
@@ -296,19 +299,21 @@ export default function AdminView() {
       await userAPI.delete(userId)
       
       // Delete from Supabase Auth if authUuid is provided
-      // Note: Supabase Admin API requires service role key, so we need a backend endpoint
-      // For now, we'll create a backend endpoint to handle this
       if (authUuid) {
         try {
-          // Call backend endpoint to delete from Supabase Auth
-          const response = await fetch(`http://localhost:8080/api/admin/users/${authUuid}/auth`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-          })
+          // Use Supabase Admin API to delete user
+          const { supabaseAdmin } = await import('../lib/supabaseAdmin')
           
-          if (!response.ok) {
-            console.warn('Failed to delete user from Supabase Auth via backend')
-            // Continue even if Supabase deletion fails - user is deleted from backend
+          if (!supabaseAdmin) {
+            console.warn('Supabase Admin client not initialized. Service role key may be missing.')
+            console.warn('User deleted from database but not from Supabase Auth.')
+          } else {
+            const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(authUuid)
+            
+            if (deleteError) {
+              console.warn('Failed to delete user from Supabase Auth:', deleteError)
+              // Continue even if Supabase deletion fails - user is deleted from backend
+            }
           }
         } catch (supabaseError) {
           console.warn('Error deleting from Supabase Auth:', supabaseError)
