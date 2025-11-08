@@ -5,10 +5,11 @@ import { supabase } from '../lib/supabase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
+import Toast from '../components/Toast'
 import './AdminView.css'
 
 export default function AdminView() {
-  const { userProfile, signOut } = useAuth()
+  const { userProfile, signOut, setIgnoreAuthChanges, setOriginalSession } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [users, setUsers] = useState([])
@@ -21,6 +22,7 @@ export default function AdminView() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [toast, setToast] = useState(null)
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalStaff: 0,
@@ -164,9 +166,23 @@ export default function AdminView() {
     e.preventDefault()
     setError('')
     setSuccess('')
+    setToast(null)
     setLoading(true)
 
     try {
+      // Get current session to restore it after creating the new user
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !currentSession) {
+        throw new Error('No active session. Please sign in again.')
+      }
+
+      const currentUserId = currentSession.user.id
+      
+      // Set flag to ignore auth state changes during user creation
+      setOriginalSession(currentSession)
+      setIgnoreAuthChanges(true)
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: staffFormData.email,
         password: staffFormData.password,
@@ -178,6 +194,12 @@ export default function AdminView() {
       if (authError) throw authError
       if (!authData.user) throw new Error('Failed to create user in Supabase Auth')
 
+      // Immediately restore the original admin session
+      await supabase.auth.setSession({
+        access_token: currentSession.access_token,
+        refresh_token: currentSession.refresh_token,
+      })
+
       await adminAPI.createStaff({
         authUuid: authData.user.id,
         email: staffFormData.email,
@@ -187,16 +209,24 @@ export default function AdminView() {
         clinicId: staffFormData.clinicId,
       })
 
-      setSuccess(`Successfully created STAFF account for ${staffFormData.email}`)
+      // Show toast notification
+      setToast({
+        message: `Successfully created STAFF account for ${staffFormData.email}`,
+        type: 'success'
+      })
+      
       setStaffFormData({ email: '', password: '', fname: '', lname: '', clinicId: 969 })
       setShowCreateStaff(false)
       await fetchUsers()
       await fetchStaff()
-      setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
-      setError(err.message || 'Failed to create staff account')
-      setTimeout(() => setError(''), 5000)
+      setToast({
+        message: err.message || 'Failed to create staff account',
+        type: 'error'
+      })
     } finally {
+      // Re-enable auth state change handling
+      setIgnoreAuthChanges(false)
       setLoading(false)
     }
   }
@@ -256,20 +286,49 @@ export default function AdminView() {
     }
   }
 
-  const deleteUser = async (userId, email) => {
+  const deleteUser = async (userId, email, authUuid) => {
     if (!confirm(`Are you sure you want to delete user ${email}?`)) return
     
     try {
       setLoading(true)
+      
+      // Delete from backend first
       await userAPI.delete(userId)
-      setSuccess('User deleted successfully')
+      
+      // Delete from Supabase Auth if authUuid is provided
+      // Note: Supabase Admin API requires service role key, so we need a backend endpoint
+      // For now, we'll create a backend endpoint to handle this
+      if (authUuid) {
+        try {
+          // Call backend endpoint to delete from Supabase Auth
+          const response = await fetch(`http://localhost:8080/api/admin/users/${authUuid}/auth`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+          })
+          
+          if (!response.ok) {
+            console.warn('Failed to delete user from Supabase Auth via backend')
+            // Continue even if Supabase deletion fails - user is deleted from backend
+          }
+        } catch (supabaseError) {
+          console.warn('Error deleting from Supabase Auth:', supabaseError)
+          // Continue even if Supabase deletion fails - user is deleted from backend
+        }
+      }
+      
+      setToast({
+        message: `User ${email} deleted successfully`,
+        type: 'success'
+      })
+      
       await fetchUsers()
       await fetchStaff()
       await fetchPatients()
-      setTimeout(() => setSuccess(''), 3000)
     } catch (err) {
-      setError(err.message || 'Failed to delete user')
-      setTimeout(() => setError(''), 5000)
+      setToast({
+        message: err.message || 'Failed to delete user',
+        type: 'error'
+      })
     } finally {
       setLoading(false)
     }
@@ -315,6 +374,14 @@ export default function AdminView() {
   return (
     <div className="admin-view">
       <Navbar />
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+          duration={4000}
+        />
+      )}
       <div className="admin-layout">
         <Sidebar />
         <div className="admin-main">
@@ -742,7 +809,7 @@ export default function AdminView() {
                                   🔑
                                 </button>
                                 <button
-                                  onClick={() => deleteUser(user.userId, user.email)}
+                                  onClick={() => deleteUser(user.userId, user.email, user.authUuid)}
                                   className="btn btn-danger btn-sm"
                                   title="Delete User"
                                 >

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { userAPI } from '../lib/api'
 
@@ -16,11 +16,14 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const ignoreAuthChangesRef = useRef(false)
+  const originalSessionRef = useRef(null)
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
+      originalSessionRef.current = session
       if (session?.user) {
         fetchUserProfile(session.user.id)
       } else {
@@ -32,6 +35,16 @@ export const AuthProvider = ({ children }) => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // If we're ignoring auth changes (during user creation), restore original session
+      if (ignoreAuthChangesRef.current && originalSessionRef.current) {
+        // Restore the original session
+        await supabase.auth.setSession({
+          access_token: originalSessionRef.current.access_token,
+          refresh_token: originalSessionRef.current.refresh_token,
+        })
+        return
+      }
+
       setUser(session?.user ?? null)
       if (session?.user) {
         await fetchUserProfile(session.user.id)
@@ -140,6 +153,14 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const setIgnoreAuthChanges = (value) => {
+    ignoreAuthChangesRef.current = value
+  }
+
+  const setOriginalSession = (session) => {
+    originalSessionRef.current = session
+  }
+
   const value = {
     user,
     userProfile,
@@ -147,6 +168,8 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    setIgnoreAuthChanges,
+    setOriginalSession,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
