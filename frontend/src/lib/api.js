@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:8080/api'
+// Use environment variable or fallback to relative path for production
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 // Helper function to make API calls
 async function apiCall(endpoint, options = {}) {
