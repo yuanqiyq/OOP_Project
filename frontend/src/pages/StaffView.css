@@ -827,6 +827,248 @@
   }
 }
 
+/* Doctors Section */
+.doctors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.doctor-card {
+  background: var(--gradient-card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid rgba(139, 21, 56, 0.15);
+  transition: all 0.3s;
+  box-shadow: 0 4px 16px rgba(139, 21, 56, 0.08);
+}
+
+.doctor-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(139, 21, 56, 0.15);
+  border-color: rgba(139, 21, 56, 0.25);
+}
+
+.doctor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(139, 21, 56, 0.1);
+}
+
+.doctor-header h3 {
+  color: var(--maroon-dark);
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.doctor-id {
+  color: #666;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.doctor-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.doctor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(139, 21, 56, 0.1);
+}
+
+.doctor-shifts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.shift-days-display {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+}
+
+.shift-day-badge {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-width: 32px;
+  text-align: center;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.shift-day-badge.active {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  box-shadow: 0 2px 8px var(--maroon-glow);
+}
+
+.shift-day-badge.inactive {
+  background: #f5f5f5;
+  color: #999;
+  border: 1px solid #e0e0e0;
+}
+
+.no-shifts {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+}
+
+/* Shift Days Selector */
+.shift-days-selector {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.shift-day-button {
+  position: relative;
+  background: #ffffff;
+  border: 2px solid rgba(139, 21, 56, 0.2);
+  border-radius: 12px;
+  padding: 1rem;
+  min-width: 80px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  box-shadow: 0 2px 8px rgba(139, 21, 56, 0.05);
+}
+
+.shift-day-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 21, 56, 0.15);
+  border-color: rgba(139, 21, 56, 0.3);
+}
+
+.shift-day-button.selected {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  border-color: var(--maroon-primary);
+  box-shadow: 0 4px 16px var(--maroon-glow);
+}
+
+.shift-day-button.selected:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px var(--maroon-glow);
+}
+
+.shift-day-button.filled {
+  background: #e0e0e0;
+  color: #999;
+  border-color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.shift-day-button.filled:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(139, 21, 56, 0.05);
+}
+
+.shift-day-button:disabled {
+  cursor: not-allowed;
+}
+
+.day-label {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.day-full {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.shift-day-button.selected .day-label,
+.shift-day-button.selected .day-full {
+  color: #ffffff;
+}
+
+.form-hint {
+  color: #666;
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+  font-style: italic;
+}
+
+.selected-days-info {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--gradient-glow);
+  border-radius: 8px;
+  border: 1px solid rgba(139, 21, 56, 0.2);
+}
+
+.selected-days-info p {
+  margin: 0;
+  color: var(--maroon-dark);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: all 0.2s;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: var(--maroon-primary);
+  background: var(--gradient-glow);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  justify-content: flex-end;
+}
+
+.input-sm {
+  background: #ffffff;
+  border: 2px solid rgba(139, 21, 56, 0.2);
+  border-radius: 10px;
+  padding: 0.625rem 1rem;
+  color: #2d2d2d;
+  font-size: 0.95rem;
+  transition: all 0.3s;
+  width: 100%;
+}
+
+.input-sm:focus {
+  outline: none;
+  border-color: var(--maroon-primary);
+  box-shadow: 0 0 0 4px var(--maroon-glow);
+}
+
 @media (max-width: 768px) {
   .staff-main {
     padding: 1rem;
@@ -843,5 +1085,18 @@
 
   .header-controls {
     width: 100%;
+  }
+
+  .doctors-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .shift-days-selector {
+    justify-content: center;
+  }
+
+  .shift-day-button {
+    min-width: 70px;
+    padding: 0.75rem;
   }
 }

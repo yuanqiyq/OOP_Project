@@ -19,6 +19,7 @@ export default function Sidebar() {
   const staffMenu = [
     { id: 'dashboard', label: 'Queue Management', icon: '📊', path: '/staff' },
     { id: 'appointments', label: 'Appointments', icon: '📅', path: '/staff/appointments' },
+    { id: 'doctors', label: 'Doctors', icon: '👨‍⚕️', path: '/staff/doctors' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/staff/settings' },
   ]
 
@@ -57,7 +58,7 @@ export default function Sidebar() {
           const isActive = currentPath === item.path || 
             (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
              currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') && !currentPath.includes('/book') ||
-             currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/settings') ||
+             currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') ||
              currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/queue') && !currentPath.includes('/appointments') && !currentPath.includes('/settings'))) ||
             (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
           return (

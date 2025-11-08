@@ -118,21 +118,6 @@ export default function PatientView() {
     }
   }
 
-  const checkIn = async (appointmentId, priority = 1) => {
-    try {
-      setLoading(true)
-      await queueAPI.checkIn(appointmentId, priority)
-      setError('')
-      setSuccess('Successfully checked in to queue!')
-      await checkQueuePosition(appointmentId)
-      setTimeout(() => setSuccess(''), 3000)
-    } catch (err) {
-      setError(err.message || 'Failed to check in')
-      setTimeout(() => setError(''), 5000)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const createTestAppointment = async () => {
     try {
@@ -729,18 +714,11 @@ export default function PatientView() {
                         </div>
                         <div className="appointment-actions">
                           <button
-                            onClick={() => checkIn(apt.appointmentId)}
-                            className="btn btn-primary btn-sm"
-                            disabled={loading}
-                          >
-                            Check In
-                          </button>
-                          <button
                             onClick={() => checkQueuePosition(apt.appointmentId)}
                             className="btn btn-secondary btn-sm"
                             disabled={loading}
                           >
-                            Check Queue
+                            Check Queue Position
                           </button>
                         </div>
                       </div>
@@ -810,13 +788,6 @@ export default function PatientView() {
                           </div>
                         </div>
                         <div className="appointment-actions-vertical">
-                          <button
-                            onClick={() => checkIn(apt.appointmentId)}
-                            className="btn btn-primary"
-                            disabled={loading || apt.apptStatus === 'COMPLETED'}
-                          >
-                            Check In to Queue
-                          </button>
                           <button
                             onClick={() => checkQueuePosition(apt.appointmentId)}
                             className="btn btn-secondary"
