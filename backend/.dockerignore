@@ -1,0 +1,15 @@
+target/
+!target/*.jar
+.mvn/wrapper/maven-wrapper.jar
+.git
+.gitignore
+README.md
+.env
+.env.local
+.env.production
+.vscode
+.idea
+*.iml
+.DS_Store
+logs/
+*.log
