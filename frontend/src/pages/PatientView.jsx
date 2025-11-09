@@ -642,7 +642,7 @@ export default function PatientView() {
 
   const isSlotAvailable = (slot) => {
     const count = getAppointmentCountForSlot(slot.datetime)
-    return count < 5
+    return count < 3
   }
 
   const handleBookAppointment = async () => {
@@ -1518,14 +1518,14 @@ export default function PatientView() {
                                     className={`time-slot ${!available ? 'unavailable' : ''} ${selectedTimeSlot?.datetime.getTime() === slot.datetime.getTime() ? 'selected' : ''}`}
                                     onClick={() => available && setSelectedTimeSlot(slot)}
                                     disabled={!available || loading}
-                                    title={!available ? `Slot full (${count}/5 appointments)` : 'Click to select'}
+                                    title={!available ? `Slot full (${count}/3 appointments)` : 'Click to select'}
                                   >
                                     <span className="time-slot-time">{slot.timeString}</span>
                                     {!available && (
                                       <span className="time-slot-badge">Full</span>
                                     )}
                                     {count > 0 && available && (
-                                      <span className="time-slot-count">{count}/5</span>
+                                      <span className="time-slot-count">{count}/3</span>
                                     )}
                                   </button>
                                 )
