@@ -148,3 +148,35 @@ export const doctorAPI = {
   delete: (id) => apiCall(`/doctors/${id}`, { method: 'DELETE' }),
 }
 
+// Report API
+export const reportAPI = {
+  getSystemUsageReport: async (startDate, endDate) => {
+    const params = new URLSearchParams()
+    if (startDate) params.append('startDate', startDate)
+    if (endDate) params.append('endDate', endDate)
+    
+    const url = `${API_BASE_URL}/report/system-usage${params.toString() ? '?' + params.toString() : ''}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP error! status: ${response.status}`)
+      }
+      
+      // Get the PDF blob
+      const blob = await response.blob()
+      return blob
+    } catch (error) {
+      console.error('Report API Error:', error)
+      throw error
+    }
+  },
+}
+

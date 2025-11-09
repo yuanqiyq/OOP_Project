@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { adminAPI, userAPI, queueAPI, appointmentAPI, clinicAPI, doctorAPI } from '../lib/api'
+import { adminAPI, userAPI, clinicAPI, doctorAPI, reportAPI } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
@@ -15,19 +15,27 @@ export default function AdminView() {
   const [users, setUsers] = useState([])
   const [staff, setStaff] = useState([])
   const [patients, setPatients] = useState([])
-  const [appointments, setAppointments] = useState([])
-  const [queue, setQueue] = useState(null)
   const [clinics, setClinics] = useState([])
   const [doctors, setDoctors] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [toast, setToast] = useState(null)
+  const [roleFilter, setRoleFilter] = useState('')
+  const [clinicSearch, setClinicSearch] = useState('')
+  const [editingClinicId, setEditingClinicId] = useState(null)
+  const [editingInterval, setEditingInterval] = useState('')
+  const [clinicPage, setClinicPage] = useState(1)
+  const [clinicsPerPage, setClinicsPerPage] = useState(50)
+  const [showDoctorModal, setShowDoctorModal] = useState(false)
+  const [selectedClinicForDoctors, setSelectedClinicForDoctors] = useState(null)
+  const [clinicDoctors, setClinicDoctors] = useState([])
+  const [allDoctors, setAllDoctors] = useState([])
+  const [newDoctorForm, setNewDoctorForm] = useState({ fname: '', lname: '', assignedClinic: null })
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalStaff: 0,
     totalPatients: 0,
-    totalAppointments: 0,
   })
   
   // Create forms state
@@ -52,19 +60,14 @@ export default function AdminView() {
     clinicId: 969,
   })
 
+  // Report state
+  const [reportStartDate, setReportStartDate] = useState('')
+  const [reportEndDate, setReportEndDate] = useState('')
+  const [generatingReport, setGeneratingReport] = useState(false)
+
   useEffect(() => {
     fetchAllData()
   }, [])
-
-  useEffect(() => {
-    // Auto-refresh if on queue monitor
-    if (location.pathname.includes('/queue') && selectedClinicId) {
-      const interval = setInterval(() => {
-        fetchQueueData(selectedClinicId)
-      }, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [location, selectedClinicId])
 
   const fetchAllData = async () => {
     await Promise.all([
@@ -129,36 +132,6 @@ export default function AdminView() {
       setDoctors(data || [])
     } catch (err) {
       console.error('Failed to load doctors', err)
-    }
-  }
-
-  const fetchAppointments = async (clinicId = null) => {
-    try {
-      setLoading(true)
-      let data
-      if (clinicId) {
-        data = await appointmentAPI.getByClinicId(clinicId)
-      } else {
-        data = await appointmentAPI.getAll()
-      }
-      setAppointments(data || [])
-      setStats(prev => ({ ...prev, totalAppointments: data?.length || 0 }))
-      setError('')
-    } catch (err) {
-      setError('Failed to load appointments')
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchQueueData = async (clinicId) => {
-    try {
-      const data = await queueAPI.getClinicQueue(clinicId)
-      setQueue(data)
-      setError('')
-    } catch (err) {
-      console.error('Failed to load queue', err)
     }
   }
 
@@ -366,12 +339,164 @@ export default function AdminView() {
     }
   }
 
+  const handleUpdateClinicInterval = async (clinicId) => {
+    if (!editingInterval || isNaN(editingInterval) || parseInt(editingInterval) <= 0) {
+      setToast({
+        message: 'Please enter a valid interval (positive number)',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setLoading(true)
+      await clinicAPI.update(clinicId, { apptIntervalMin: parseInt(editingInterval) })
+      setToast({
+        message: `Appointment interval updated to ${editingInterval} minutes`,
+        type: 'success'
+      })
+      await fetchClinics()
+      setEditingClinicId(null)
+      setEditingInterval('')
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to update appointment interval',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openDoctorModal = async (clinic) => {
+    setSelectedClinicForDoctors(clinic)
+    setShowDoctorModal(true)
+    try {
+      const [clinicDocs, allDocs] = await Promise.all([
+        doctorAPI.getByClinic(clinic.id),
+        doctorAPI.getAll()
+      ])
+      setClinicDoctors(clinicDocs || [])
+      setAllDoctors(allDocs || [])
+      setNewDoctorForm({ fname: '', lname: '', assignedClinic: clinic.id })
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to load doctors',
+        type: 'error'
+      })
+    }
+  }
+
+  const handleAssignDoctor = async (doctorId, clinicId) => {
+    try {
+      setLoading(true)
+      await doctorAPI.update(doctorId, { assignedClinic: clinicId })
+      setToast({
+        message: 'Doctor assigned successfully',
+        type: 'success'
+      })
+      await openDoctorModal(selectedClinicForDoctors)
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to assign doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUnassignDoctor = async (doctorId) => {
+    try {
+      setLoading(true)
+      await doctorAPI.update(doctorId, { assignedClinic: null })
+      setToast({
+        message: 'Doctor unassigned successfully',
+        type: 'success'
+      })
+      await openDoctorModal(selectedClinicForDoctors)
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to unassign doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateDoctor = async (e) => {
+    e.preventDefault()
+    if (!newDoctorForm.fname || !newDoctorForm.lname) {
+      setToast({
+        message: 'Please fill in both first and last name',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setLoading(true)
+      await doctorAPI.create(newDoctorForm)
+      setToast({
+        message: 'Doctor created and assigned successfully',
+        type: 'success'
+      })
+      setNewDoctorForm({ fname: '', lname: '', assignedClinic: selectedClinicForDoctors.id })
+      await openDoctorModal(selectedClinicForDoctors)
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to create doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getCurrentView = () => {
     if (location.pathname.includes('/users')) return 'users'
-    if (location.pathname.includes('/queue')) return 'queue'
-    if (location.pathname.includes('/appointments')) return 'appointments'
+    if (location.pathname.includes('/clinics')) return 'clinics'
+    if (location.pathname.includes('/reports')) return 'reports'
     if (location.pathname.includes('/settings')) return 'settings'
     return 'dashboard'
+  }
+
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true)
+      setError('')
+      setToast(null)
+
+      const blob = await reportAPI.getSystemUsageReport(reportStartDate || null, reportEndDate || null)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Generate filename
+      const startStr = reportStartDate ? reportStartDate.replace(/-/g, '') : 'start'
+      const endStr = reportEndDate ? reportEndDate.replace(/-/g, '') : 'end'
+      link.download = `SystemUsageReport_${startStr}_${endStr}.pdf`
+      
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      setToast({
+        message: 'Report generated and downloaded successfully',
+        type: 'success'
+      })
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to generate report',
+        type: 'error'
+      })
+    } finally {
+      setGeneratingReport(false)
+    }
   }
 
   const currentView = getCurrentView()
@@ -446,13 +571,6 @@ export default function AdminView() {
                   <div className="stat-content">
                     <h3>{stats.totalPatients}</h3>
                     <p>Patients</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">📅</div>
-                  <div className="stat-content">
-                    <h3>{stats.totalAppointments}</h3>
-                    <p>Appointments</p>
                   </div>
                 </div>
               </div>
@@ -649,10 +767,6 @@ export default function AdminView() {
                     <span className="action-icon">🏥</span>
                     <span className="action-label">Refresh Patients</span>
                   </button>
-                  <button onClick={() => fetchAppointments()} className="action-card">
-                    <span className="action-icon">📅</span>
-                    <span className="action-label">View All Appointments</span>
-                  </button>
                 </div>
               </div>
 
@@ -703,15 +817,6 @@ export default function AdminView() {
                       </button>
                       <button
                         onClick={() => {
-                          setTestEndpoint('/appointments')
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /appointments
-                      </button>
-                      <button
-                        onClick={() => {
                           setTestEndpoint('/clinics')
                           testBackendEndpoint()
                         }}
@@ -727,15 +832,6 @@ export default function AdminView() {
                         className="example-btn"
                       >
                         /doctors
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTestEndpoint(`/queue/clinic/${selectedClinicId}`)
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /queue/clinic/{selectedClinicId}
                       </button>
                     </div>
                   </div>
@@ -755,12 +851,12 @@ export default function AdminView() {
 
               <div className="section-card">
                 <div className="section-header">
-                  <h2>All Users ({users.length})</h2>
+                  <h2>All Users ({roleFilter ? users.filter(u => u.role === roleFilter).length : users.length})</h2>
                   <div className="filter-controls">
                     <select
+                      value={roleFilter}
                       onChange={(e) => {
-                        // Filter logic can be added
-                        fetchUsers()
+                        setRoleFilter(e.target.value)
                       }}
                       className="select-input"
                     >
@@ -787,7 +883,7 @@ export default function AdminView() {
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((user) => (
+                        {(roleFilter ? users.filter(u => u.role === roleFilter) : users).map((user) => (
                           <tr key={user.userId}>
                             <td>{user.userId}</td>
                             <td>
@@ -860,195 +956,240 @@ export default function AdminView() {
             </>
           )}
 
-          {currentView === 'queue' && (
-            <>
-              <div className="page-header">
-                <h1>Queue Monitor</h1>
-                <div className="header-controls">
-                  <div className="clinic-selector">
-                    <label>Clinic:</label>
-                    <select
-                      value={selectedClinicId}
-                      onChange={(e) => {
-                        setSelectedClinicId(Number(e.target.value))
-                        fetchQueueData(Number(e.target.value))
-                      }}
-                      className="select-input"
-                    >
-                      {clinics.map(clinic => (
-                        <option key={clinic.id} value={clinic.id}>
-                          {clinic.name} (ID: {clinic.id})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    onClick={() => fetchQueueData(selectedClinicId)}
-                    className="btn btn-secondary"
-                  >
+          {currentView === 'clinics' && (() => {
+            // Filter clinics based on search
+            const filteredClinics = clinicSearch ? clinics.filter(c => 
+              c.name?.toLowerCase().includes(clinicSearch.toLowerCase()) ||
+              c.address?.toLowerCase().includes(clinicSearch.toLowerCase()) ||
+              c.region?.toLowerCase().includes(clinicSearch.toLowerCase()) ||
+              c.area?.toLowerCase().includes(clinicSearch.toLowerCase()) ||
+              String(c.id).includes(clinicSearch)
+            ) : clinics
+
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredClinics.length / clinicsPerPage)
+            const startIndex = (clinicPage - 1) * clinicsPerPage
+            const endIndex = startIndex + clinicsPerPage
+            const paginatedClinics = filteredClinics.slice(startIndex, endIndex)
+
+            return (
+              <>
+                <div className="page-header">
+                  <h1>Clinic Management</h1>
+                  <button onClick={fetchClinics} className="btn btn-secondary">
                     Refresh
                   </button>
                 </div>
-              </div>
 
-              {queue && (
                 <div className="section-card">
                   <div className="section-header">
-                    <h2>Queue Status - {clinics.find(c => c.id === selectedClinicId)?.name || `Clinic ${selectedClinicId}`}</h2>
-                    <span className="queue-status-badge">
-                      {queue.totalInQueue || 0} in queue
-                    </span>
-                  </div>
-                  {queue.queue && queue.queue.length > 0 ? (
-                    <div className="queue-list-enhanced">
-                      {queue.queue.map((entry, index) => (
-                        <div key={entry.queueId} className={`queue-item-enhanced ${index === 0 ? 'next-up' : ''}`}>
-                          <div className="queue-number">
-                            <span className="queue-position-badge">{index + 1}</span>
-                          </div>
-                          <div className="queue-details-enhanced">
-                            <div className="queue-header">
-                              <h3>Appointment #{entry.appointmentId}</h3>
-                              <span className={`priority-badge priority-${entry.priority}`}>
-                                Priority {entry.priority}
-                              </span>
-                            </div>
-                            <div className="queue-info-grid">
-                              <div className="info-item">
-                                <span className="info-label">Patient:</span>
-                                <span className="info-value">{entry.patientName || 'N/A'}</span>
-                              </div>
-                              <div className="info-item">
-                                <span className="info-label">Status:</span>
-                                <span className="info-value">{entry.status}</span>
-                              </div>
-                              <div className="info-item">
-                                <span className="info-label">Check-in:</span>
-                                <span className="info-value">
-                                  {new Date(entry.createdAt).toLocaleTimeString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <h2>All Clinics ({filteredClinics.length})</h2>
+                    <div className="filter-controls">
+                      <input
+                        type="text"
+                        placeholder="Search by name, address, region, area, or ID..."
+                        value={clinicSearch}
+                        onChange={(e) => {
+                          setClinicSearch(e.target.value)
+                          setClinicPage(1) // Reset to first page on search
+                        }}
+                        className="search-input"
+                      />
+                      <select
+                        value={clinicsPerPage}
+                        onChange={(e) => {
+                          setClinicsPerPage(Number(e.target.value))
+                          setClinicPage(1) // Reset to first page when changing page size
+                        }}
+                        className="select-input"
+                        style={{ minWidth: '120px' }}
+                      >
+                        <option value={25}>25 per page</option>
+                        <option value={50}>50 per page</option>
+                        <option value={100}>100 per page</option>
+                        <option value={200}>200 per page</option>
+                      </select>
                     </div>
+                  </div>
+                  {loading ? (
+                    <div className="loading">Loading...</div>
                   ) : (
-                    <div className="empty-state">Queue is empty</div>
+                    <>
+                      <div className="clinics-table-container">
+                        <table className="users-table">
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>Name</th>
+                              <th>Address</th>
+                              <th>Region</th>
+                              <th>Area</th>
+                              <th>Appt Interval (min)</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedClinics.map((clinic) => (
+                          <tr key={clinic.id}>
+                            <td>{clinic.id}</td>
+                            <td>{clinic.name || 'N/A'}</td>
+                            <td>{clinic.address || 'N/A'}</td>
+                            <td>{clinic.region || 'N/A'}</td>
+                            <td>{clinic.area || 'N/A'}</td>
+                            <td>
+                              {editingClinicId === clinic.id ? (
+                                <div className="inline-edit">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={editingInterval}
+                                    onChange={(e) => setEditingInterval(e.target.value)}
+                                    className="inline-input"
+                                    placeholder={clinic.apptIntervalMin || '15'}
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateClinicInterval(clinic.id)}
+                                    className="btn btn-success btn-sm"
+                                    disabled={loading}
+                                    title="Save"
+                                  >
+                                    ✓
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingClinicId(null)
+                                      setEditingInterval('')
+                                    }}
+                                    className="btn btn-secondary btn-sm"
+                                    disabled={loading}
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="inline-display">
+                                  <span>{clinic.apptIntervalMin || 15} min</span>
+                                  <button
+                                    onClick={() => {
+                                      setEditingClinicId(clinic.id)
+                                      setEditingInterval(clinic.apptIntervalMin?.toString() || '15')
+                                    }}
+                                    className="btn btn-secondary btn-sm"
+                                    title="Edit Interval"
+                                  >
+                                    ✏️
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <button
+                                onClick={() => openDoctorModal(clinic)}
+                                className="btn btn-primary btn-sm"
+                                title="Configure Doctors"
+                              >
+                                👨‍⚕️ Doctors
+                              </button>
+                            </td>
+                          </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {totalPages > 1 && (
+                        <div className="pagination-controls">
+                          <button
+                            onClick={() => setClinicPage(prev => Math.max(1, prev - 1))}
+                            disabled={clinicPage === 1}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            ← Previous
+                          </button>
+                          <span className="pagination-info">
+                            Page {clinicPage} of {totalPages} 
+                            ({startIndex + 1}-{Math.min(endIndex, filteredClinics.length)} of {filteredClinics.length})
+                          </span>
+                          <button
+                            onClick={() => setClinicPage(prev => Math.min(totalPages, prev + 1))}
+                            disabled={clinicPage === totalPages}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-              )}
-            </>
-          )}
+              </>
+            )
+          })()}
 
-          {currentView === 'appointments' && (
+          {currentView === 'reports' && (
             <>
               <div className="page-header">
-                <h1>Appointment Management</h1>
-                <div className="header-controls">
-                  <div className="clinic-selector">
-                    <label>Filter by Clinic:</label>
-                    <select
-                      onChange={(e) => {
-                        const clinicId = e.target.value ? Number(e.target.value) : null
-                        fetchAppointments(clinicId)
-                      }}
-                      className="select-input"
-                    >
-                      <option value="">All Clinics</option>
-                      {clinics.map(clinic => (
-                        <option key={clinic.id} value={clinic.id}>
-                          {clinic.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button onClick={() => fetchAppointments()} className="btn btn-secondary">
-                    Refresh
-                  </button>
-                </div>
+                <h1>System Usage Reports</h1>
+                <p className="subtitle">Generate comprehensive system-wide usage reports</p>
               </div>
 
               <div className="section-card">
-                <div className="section-header">
-                  <h2>All Appointments ({appointments.length})</h2>
-                </div>
-                {loading ? (
-                  <div className="loading">Loading...</div>
-                ) : appointments.length === 0 ? (
-                  <div className="empty-state">No appointments found</div>
-                ) : (
-                  <div className="appointments-table-container">
-                    <table className="appointments-table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Patient ID</th>
-                          <th>Clinic ID</th>
-                          <th>Doctor ID</th>
-                          <th>Date & Time</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {appointments.map((apt) => (
-                          <tr key={apt.appointmentId}>
-                            <td>#{apt.appointmentId}</td>
-                            <td>{apt.patientId}</td>
-                            <td>{apt.clinicId}</td>
-                            <td>{apt.doctorId || 'N/A'}</td>
-                            <td>{new Date(apt.dateTime).toLocaleString()}</td>
-                            <td>
-                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                                {apt.apptStatus || 'PENDING'}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="action-buttons-small">
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await appointmentAPI.updateStatus(apt.appointmentId, 'COMPLETED')
-                                      setSuccess('Appointment status updated')
-                                      await fetchAppointments()
-                                      setTimeout(() => setSuccess(''), 3000)
-                                    } catch (err) {
-                                      setError(err.message)
-                                      setTimeout(() => setError(''), 5000)
-                                    }
-                                  }}
-                                  className="btn btn-success btn-sm"
-                                  disabled={apt.apptStatus === 'COMPLETED'}
-                                  title="Mark Completed"
-                                >
-                                  ✓
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      await appointmentAPI.delete(apt.appointmentId)
-                                      setSuccess('Appointment deleted')
-                                      await fetchAppointments()
-                                      setTimeout(() => setSuccess(''), 3000)
-                                    } catch (err) {
-                                      setError(err.message)
-                                      setTimeout(() => setError(''), 5000)
-                                    }
-                                  }}
-                                  className="btn btn-danger btn-sm"
-                                  title="Delete"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <h2>System-Wide Usage Report</h2>
+                <p className="form-description">
+                  Generate a comprehensive PDF report with system-wide statistics including appointments, cancellations, 
+                  patients seen, average waiting time, and no-show rates. Default period is from the start of the current month to today.
+                </p>
+
+                <div className="report-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="report-start-date">Start Date (Optional)</label>
+                      <input
+                        id="report-start-date"
+                        type="date"
+                        value={reportStartDate}
+                        onChange={(e) => setReportStartDate(e.target.value)}
+                        className="form-input"
+                        disabled={generatingReport}
+                      />
+                      <small className="form-hint">If empty, defaults to start of current month</small>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="report-end-date">End Date (Optional)</label>
+                      <input
+                        id="report-end-date"
+                        type="date"
+                        value={reportEndDate}
+                        onChange={(e) => setReportEndDate(e.target.value)}
+                        className="form-input"
+                        max={new Date().toISOString().split('T')[0]}
+                        disabled={generatingReport}
+                      />
+                      <small className="form-hint">If empty, defaults to today's date</small>
+                    </div>
                   </div>
-                )}
+
+                  <div className="report-metrics-info">
+                    <h3>Report Includes:</h3>
+                    <ul className="metrics-list">
+                      <li>📊 <strong>Total Appointments Booked</strong> - All appointments excluding cancelled ones</li>
+                      <li>❌ <strong>Total Cancellations</strong> - All cancelled appointments</li>
+                      <li>👥 <strong>Patients Seen</strong> - All queue logs with completed status</li>
+                      <li>⏱️ <strong>Average Waiting Time</strong> - Mean time from appointment start to check-in</li>
+                      <li>🚫 <strong>No-Show Rate</strong> - Ratio of appointments without queue logs</li>
+                    </ul>
+                  </div>
+
+                  <div className="form-actions">
+                    <button
+                      onClick={handleGenerateReport}
+                      className="btn btn-primary"
+                      disabled={generatingReport}
+                    >
+                      {generatingReport ? 'Generating PDF...' : '📄 Generate & Download PDF Report'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -1091,10 +1232,6 @@ export default function AdminView() {
                     <span className="info-value">{stats.totalPatients}</span>
                   </div>
                   <div className="info-row">
-                    <span className="info-label">Total Appointments:</span>
-                    <span className="info-value">{stats.totalAppointments}</span>
-                  </div>
-                  <div className="info-row">
                     <span className="info-label">Total Clinics:</span>
                     <span className="info-value">{clinics.length}</span>
                   </div>
@@ -1108,6 +1245,126 @@ export default function AdminView() {
           )}
         </div>
       </div>
+
+      {/* Doctor Configuration Modal */}
+      {showDoctorModal && selectedClinicForDoctors && (
+        <div className="modal-overlay" onClick={() => setShowDoctorModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Configure Doctors - {selectedClinicForDoctors.name}</h2>
+              <button
+                onClick={() => setShowDoctorModal(false)}
+                className="modal-close"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Assigned Doctors */}
+              <div className="section-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Assigned Doctors ({clinicDoctors.length})</h3>
+                {clinicDoctors.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '2rem' }}>No doctors assigned to this clinic</div>
+                ) : (
+                  <div className="doctors-list">
+                    {clinicDoctors.map((doctor) => (
+                      <div key={doctor.id} className="doctor-item">
+                        <div className="doctor-info">
+                          <strong>{doctor.fname} {doctor.lname}</strong>
+                          <span className="doctor-id">ID: {doctor.id}</span>
+                          {doctor.shiftDays && doctor.shiftDays.length > 0 && (
+                            <span className="shift-days">
+                              Shift Days: {doctor.shiftDays.join(', ')}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleUnassignDoctor(doctor.id)}
+                          className="btn btn-danger btn-sm"
+                          disabled={loading}
+                        >
+                          Unassign
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Assign Existing Doctor */}
+              <div className="section-card" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Assign Existing Doctor</h3>
+                {allDoctors.filter(d => !d.assignedClinic || d.assignedClinic !== selectedClinicForDoctors.id).length === 0 ? (
+                  <div className="empty-state" style={{ padding: '1rem' }}>No unassigned doctors available</div>
+                ) : (
+                  <div className="doctors-list">
+                    {allDoctors
+                      .filter(d => !d.assignedClinic || d.assignedClinic !== selectedClinicForDoctors.id)
+                      .map((doctor) => (
+                        <div key={doctor.id} className="doctor-item">
+                          <div className="doctor-info">
+                            <strong>{doctor.fname} {doctor.lname}</strong>
+                            <span className="doctor-id">ID: {doctor.id}</span>
+                            {doctor.assignedClinic && (
+                              <span className="assigned-to">Currently at Clinic {doctor.assignedClinic}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => handleAssignDoctor(doctor.id, selectedClinicForDoctors.id)}
+                            className="btn btn-success btn-sm"
+                            disabled={loading}
+                          >
+                            Assign
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Create New Doctor */}
+              <div className="section-card" style={{ padding: '1.5rem' }}>
+                <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>Create New Doctor</h3>
+                <form onSubmit={handleCreateDoctor} className="create-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="doctor-fname">First Name</label>
+                      <input
+                        id="doctor-fname"
+                        type="text"
+                        value={newDoctorForm.fname}
+                        onChange={(e) =>
+                          setNewDoctorForm({ ...newDoctorForm, fname: e.target.value })
+                        }
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="doctor-lname">Last Name</label>
+                      <input
+                        id="doctor-lname"
+                        type="text"
+                        value={newDoctorForm.lname}
+                        onChange={(e) =>
+                          setNewDoctorForm({ ...newDoctorForm, lname: e.target.value })
+                        }
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? 'Creating...' : 'Create & Assign Doctor'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

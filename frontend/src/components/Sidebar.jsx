@@ -26,8 +26,8 @@ export default function Sidebar() {
   const adminMenu = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', path: '/admin' },
     { id: 'users', label: 'Users', icon: '👥', path: '/admin/users' },
-    { id: 'queue', label: 'Queue Monitor', icon: '⏳', path: '/admin/queue' },
-    { id: 'appointments', label: 'Appointments', icon: '📅', path: '/admin/appointments' },
+    { id: 'clinics', label: 'Clinics', icon: '🏥', path: '/admin/clinics' },
+    { id: 'reports', label: 'Reports', icon: '📈', path: '/admin/reports' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/admin/settings' },
   ]
 
@@ -59,7 +59,7 @@ export default function Sidebar() {
             (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
              currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') && !currentPath.includes('/book') ||
              currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') ||
-             currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/queue') && !currentPath.includes('/appointments') && !currentPath.includes('/settings'))) ||
+             currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
             (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
           return (
             <button
