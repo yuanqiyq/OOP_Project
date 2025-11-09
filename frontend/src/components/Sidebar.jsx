@@ -20,6 +20,7 @@ export default function Sidebar() {
     { id: 'dashboard', label: 'Queue Management', icon: '📊', path: '/staff' },
     { id: 'appointments', label: 'Appointments', icon: '📅', path: '/staff/appointments' },
     { id: 'doctors', label: 'Doctors', icon: '👨‍⚕️', path: '/staff/doctors' },
+    { id: 'display', label: 'Display', icon: '🖥️', path: '/staff/display', openInNewTab: true },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/staff/settings' },
   ]
 
@@ -47,24 +48,30 @@ export default function Sidebar() {
   const menu = getMenu()
   const currentPath = location.pathname
 
-  const handleNavigation = (path) => {
-    navigate(path)
+  const handleNavigation = (item) => {
+    if (item.openInNewTab) {
+      window.open(item.path, '_blank')
+    } else {
+      navigate(item.path)
+    }
   }
 
   return (
     <aside className="sidebar">
       <div className="sidebar-content">
         {menu.map((item) => {
-          const isActive = currentPath === item.path || 
+          const isActive = !item.openInNewTab && (
+            currentPath === item.path || 
             (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
              currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') && !currentPath.includes('/book') ||
-             currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') ||
+             currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') && !currentPath.includes('/display') ||
              currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
             (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
+          )
           return (
             <button
               key={item.id}
-              onClick={() => handleNavigation(item.path)}
+              onClick={() => handleNavigation(item)}
               className={`sidebar-item ${isActive ? 'active' : ''}`}
             >
               <span className="sidebar-icon">{item.icon}</span>

@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import AuthPage from './pages/AuthPage'
 import PatientView from './pages/PatientView'
 import StaffView from './pages/StaffView'
+import StaffDisplay from './pages/StaffDisplay'
 import AdminView from './pages/AdminView'
 import UnauthorizedPage from './pages/UnauthorizedPage'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -50,6 +51,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['PATIENT']}>
             <PatientView />
+          </ProtectedRoute>
+        }
+      />
+      
+      <Route
+        path="/staff/display"
+        element={
+          <ProtectedRoute allowedRoles={['STAFF', 'ADMIN']}>
+            <StaffDisplay />
           </ProtectedRoute>
         }
       />
