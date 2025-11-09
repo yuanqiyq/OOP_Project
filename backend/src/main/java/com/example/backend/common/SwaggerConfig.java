@@ -16,7 +16,7 @@ public class SwaggerConfig {
                                 .info(new Info()
                                                 .title("SingHealth Clinic Queue & Appointment Management API")
                                                 .version("1.0.0")
-                                                .description("API for managing appointments, queue, patients, doctors, and email notifications")
+                                                .description("API for managing appointments, queue, patients, doctors, email notifications, clinic reports, and system-wide usage reports")
                                                 .contact(new Contact()
                                                                 .name("SingHealth Development Team")
                                                                 .email("dev@singhealth-clinic.sg"))

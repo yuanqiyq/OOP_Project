@@ -67,6 +67,9 @@ public class QueueLog {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "appointment_start")
+    private LocalDateTime appointmentStart;
+
     /**
      * Constructor for creating new queue entries
      */
