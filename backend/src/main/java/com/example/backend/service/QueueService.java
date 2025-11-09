@@ -50,9 +50,10 @@ public class QueueService {
      * Check in a patient - create a new queue entry
      *
      * @param appointmentId ID of the patient's appointment
-     * @param priority Priority level (1=Normal, 2=Elderly, 3=Emergency)
+     * @param priority      Priority level (1=Normal, 2=Elderly, 3=Emergency)
      * @return Created QueueLog entry
-     * @throws QueueException if appointment not found or duplicate IN_QUEUE entry exists
+     * @throws QueueException if appointment not found or duplicate IN_QUEUE entry
+     *                        exists
      */
     @Transactional
     public QueueLog checkInPatient(Long appointmentId, Integer priority) {
@@ -63,7 +64,7 @@ public class QueueService {
 
         // Validate appointment exists
         Appointment appointment = appointmentRepository.findById(appointmentId)
-            .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
+                .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
 
         // Prevent duplicate IN_QUEUE entries for the same appointment
         if (queueRepository.existsByAppointmentIdAndStatus(appointmentId, QueueLog.STATUS_IN_QUEUE)) {
@@ -72,21 +73,21 @@ public class QueueService {
 
         // Create new queue entry
         QueueLog queueEntry = new QueueLog(
-            appointment.getClinicId(),
-            appointmentId,
-            priority
-        );
+                appointment.getClinicId(),
+                appointmentId,
+                priority);
 
         QueueLog saved = queueRepository.save(queueEntry);
-        
+
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
-        
+
         return saved;
     }
 
     /**
-     * Get the active queue for a clinic, sorted by priority DESC then created_at ASC
+     * Get the active queue for a clinic, sorted by priority DESC then created_at
+     * ASC
      *
      * @param clinicId ID of the clinic
      * @return List of queue entries (only IN_QUEUE status)
@@ -94,9 +95,8 @@ public class QueueService {
     @Transactional(readOnly = true)
     public List<QueueLog> getClinicQueue(Long clinicId) {
         return queueRepository.findByClinicIdAndStatusOrderByPriorityDescCreatedAtAsc(
-            clinicId,
-            QueueLog.STATUS_IN_QUEUE
-        );
+                clinicId,
+                QueueLog.STATUS_IN_QUEUE);
     }
 
     /**
@@ -111,11 +111,11 @@ public class QueueService {
         long totalInQueue = queueEntries.size();
 
         return queueEntries.stream()
-            .map((entry) -> {
-                Integer position = queueEntries.indexOf(entry) + 1;
-                return convertToQueueEntryDTO(entry, position, (int) totalInQueue);
-            })
-            .collect(Collectors.toList());
+                .map((entry) -> {
+                    Integer position = queueEntries.indexOf(entry) + 1;
+                    return convertToQueueEntryDTO(entry, position, (int) totalInQueue);
+                })
+                .collect(Collectors.toList());
     }
 
     /**
@@ -129,9 +129,8 @@ public class QueueService {
     public QueuePositionDTO getQueuePosition(Long appointmentId) {
         // Find the queue entry for this appointment
         Optional<QueueLog> queueEntry = queueRepository.findByAppointmentIdAndStatus(
-            appointmentId,
-            QueueLog.STATUS_IN_QUEUE
-        );
+                appointmentId,
+                QueueLog.STATUS_IN_QUEUE);
 
         if (queueEntry.isEmpty()) {
             throw new QueueException("No active queue entry found for appointment ID: " + appointmentId);
@@ -148,22 +147,22 @@ public class QueueService {
         String message = buildPositionMessage(position);
 
         return QueuePositionDTO.builder()
-            .appointmentId(appointmentId)
-            .position(position)
-            .status(entry.getStatus())
-            .priority(entry.getPriority())
-            .totalInQueue(totalInQueue)
-            .estimatedWaitTimeMinutes(estimateWaitTime(position))
-            .message(message)
-            .isQueued(true)
-            .build();
+                .appointmentId(appointmentId)
+                .position(position)
+                .status(entry.getStatus())
+                .priority(entry.getPriority())
+                .totalInQueue(totalInQueue)
+                .estimatedWaitTimeMinutes(estimateWaitTime(position))
+                .message(message)
+                .isQueued(true)
+                .build();
     }
 
     /**
      * Update the status of a queue entry
      * Valid transitions: IN_QUEUE → DONE or MISSED
      *
-     * @param queueId ID of the queue entry
+     * @param queueId   ID of the queue entry
      * @param newStatus New status (DONE or MISSED)
      * @return Updated QueueLog entry
      * @throws QueueException if queue entry not found or invalid transition
@@ -173,28 +172,27 @@ public class QueueService {
         // Validate new status
         if (!QueueLog.isValidStatus(newStatus)) {
             throw new QueueException("Invalid status: " + newStatus +
-                ". Valid statuses are: IN_QUEUE, DONE, MISSED");
+                    ". Valid statuses are: IN_QUEUE, DONE, MISSED");
         }
 
         // Find queue entry
         QueueLog queueEntry = queueRepository.findById(queueId)
-            .orElseThrow(() -> new QueueException("Queue entry not found with ID: " + queueId));
+                .orElseThrow(() -> new QueueException("Queue entry not found with ID: " + queueId));
 
         // Validate status transition
         if (!QueueLog.isValidTransition(queueEntry.getStatus(), newStatus)) {
             throw new QueueException(
-                "Invalid status transition from " + queueEntry.getStatus() +
-                " to " + newStatus + ". Can only transition from IN_QUEUE to DONE or MISSED"
-            );
+                    "Invalid status transition from " + queueEntry.getStatus() +
+                            " to " + newStatus + ". Can only transition from IN_QUEUE to DONE or MISSED");
         }
 
         // Update status
         queueEntry.setStatus(newStatus);
         QueueLog saved = queueRepository.save(queueEntry);
-        
+
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
-        
+
         return saved;
     }
 
@@ -203,7 +201,7 @@ public class QueueService {
      * The original MISSED entry is kept for audit purposes
      *
      * @param appointmentId ID of the original appointment
-     * @param newPriority New priority assigned by staff
+     * @param newPriority   New priority assigned by staff
      * @return Newly created QueueLog entry
      * @throws QueueException if appointment or original queue entry not found
      */
@@ -216,13 +214,12 @@ public class QueueService {
 
         // Verify appointment exists
         Appointment appointment = appointmentRepository.findById(appointmentId)
-            .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
+                .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
 
         // Verify original MISSED entry exists
         Optional<QueueLog> missedEntry = queueRepository.findByAppointmentIdAndStatus(
-            appointmentId,
-            QueueLog.STATUS_MISSED
-        );
+                appointmentId,
+                QueueLog.STATUS_MISSED);
 
         if (missedEntry.isEmpty()) {
             throw new QueueException("No MISSED queue entry found for appointment ID: " + appointmentId);
@@ -230,16 +227,15 @@ public class QueueService {
 
         // Create new queue entry (original MISSED entry is kept)
         QueueLog newQueueEntry = new QueueLog(
-            appointment.getClinicId(),
-            appointmentId,
-            newPriority
-        );
+                appointment.getClinicId(),
+                appointmentId,
+                newPriority);
 
         QueueLog saved = queueRepository.save(newQueueEntry);
-        
+
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
-        
+
         return saved;
     }
 
@@ -263,9 +259,8 @@ public class QueueService {
     @Transactional(readOnly = true)
     public boolean isAppointmentInQueue(Long appointmentId) {
         return queueRepository.existsByAppointmentIdAndStatus(
-            appointmentId,
-            QueueLog.STATUS_IN_QUEUE
-        );
+                appointmentId,
+                QueueLog.STATUS_IN_QUEUE);
     }
 
     /**
@@ -293,13 +288,27 @@ public class QueueService {
     /**
      * Get all missed queue entries for a clinic
      * Used to identify patients who didn't show up and can be re-queued
+     * Excludes appointments that have a DONE status (already completed)
      *
      * @param clinicId ID of the clinic
-     * @return List of missed queue entries
+     * @return List of missed queue entries that can still be re-queued
      */
     @Transactional(readOnly = true)
     public List<QueueLog> getMissedQueueEntries(Long clinicId) {
-        return queueRepository.findByClinicIdAndStatus(clinicId, QueueLog.STATUS_MISSED);
+        // Get all MISSED entries for the clinic
+        List<QueueLog> missedEntries = queueRepository.findByClinicIdAndStatus(clinicId, QueueLog.STATUS_MISSED);
+
+        // Filter out appointments that have a DONE status (already completed)
+        return missedEntries.stream()
+                .filter(entry -> {
+                    // Check if this appointment has a DONE entry
+                    boolean hasDoneEntry = queueRepository.existsByAppointmentIdAndStatus(
+                            entry.getAppointmentId(),
+                            QueueLog.STATUS_DONE);
+                    // Only include if it doesn't have a DONE entry (can still be re-queued)
+                    return !hasDoneEntry;
+                })
+                .collect(Collectors.toList());
     }
 
     // Helper methods
@@ -312,19 +321,19 @@ public class QueueService {
         Optional<Appointment> appointment = appointmentRepository.findById(queueLog.getAppointmentId());
 
         return QueueEntryDTO.builder()
-            .queueId(queueLog.getQueueId())
-            .clinicId(queueLog.getClinicId())
-            .appointmentId(queueLog.getAppointmentId())
-            .patientId(appointment.map(Appointment::getPatientId).orElse(null))
-            .doctorId(appointment.map(Appointment::getDoctorId).orElse(null))
-            .appointmentDateTime(appointment.map(Appointment::getDateTime).orElse(null))
-            .status(queueLog.getStatus())
-            .priority(queueLog.getPriority())
-            .position(position)
-            .createdAt(queueLog.getCreatedAt())
-            .totalInQueue(totalInQueue)
-            .estimatedWaitTimeMinutes(estimateWaitTime(position))
-            .build();
+                .queueId(queueLog.getQueueId())
+                .clinicId(queueLog.getClinicId())
+                .appointmentId(queueLog.getAppointmentId())
+                .patientId(appointment.map(Appointment::getPatientId).orElse(null))
+                .doctorId(appointment.map(Appointment::getDoctorId).orElse(null))
+                .appointmentDateTime(appointment.map(Appointment::getDateTime).orElse(null))
+                .status(queueLog.getStatus())
+                .priority(queueLog.getPriority())
+                .position(position)
+                .createdAt(queueLog.getCreatedAt())
+                .totalInQueue(totalInQueue)
+                .estimatedWaitTimeMinutes(estimateWaitTime(position))
+                .build();
     }
 
     /**
