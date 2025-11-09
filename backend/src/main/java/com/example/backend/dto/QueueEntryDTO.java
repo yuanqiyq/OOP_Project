@@ -47,6 +47,11 @@ public class QueueEntryDTO {
     private Long patientId;
 
     /**
+     * Patient name (first name + last name)
+     */
+    private String patientName;
+
+    /**
      * Doctor ID (from appointment)
      */
     private Long doctorId;

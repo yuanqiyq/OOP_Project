@@ -1,5 +1,7 @@
 package com.example.backend.service;
 
+import java.io.IOException;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -12,12 +14,20 @@ import com.example.backend.dto.QueueEntryDTO;
 import com.example.backend.event.QueueChangedEvent;
 import com.example.backend.dto.QueuePositionDTO;
 import com.example.backend.exception.QueueException;
+import com.example.backend.model.Patient;
+import com.example.backend.model.Doctor;
+import com.example.backend.model.clinic.Clinic;
 import com.example.backend.model.appointments.Appointment;
+import com.example.backend.model.notification.NotificationRequest;
 import com.example.backend.model.queue.QueueLog;
 import com.example.backend.repo.AppointmentRepository;
+import com.example.backend.repo.ClinicRepository;
+import com.example.backend.repo.DoctorRepository;
+import com.example.backend.repo.PatientRepository;
 import com.example.backend.repo.QueueRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Service: QueueService
@@ -40,11 +50,18 @@ import lombok.RequiredArgsConstructor;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class QueueService {
 
     private final QueueRepository queueRepository;
     private final AppointmentRepository appointmentRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationService notificationService;
+    private final PatientRepository patientRepository;
+    private final ClinicRepository clinicRepository;
+    private final DoctorRepository doctorRepository;
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     /**
      * Check in a patient - create a new queue entry
@@ -81,6 +98,9 @@ public class QueueService {
 
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
+
+        // Check and send queue position notifications (position 1 and position 3)
+        checkAndSendQueueNotifications(appointment.getClinicId());
 
         return saved;
     }
@@ -186,12 +206,43 @@ public class QueueService {
                             " to " + newStatus + ". Can only transition from IN_QUEUE to DONE or MISSED");
         }
 
+        // Get queue position before status change (for "your turn" notification)
+        int queuePosition = 1; // Default to 1 if patient is being called
+        if (QueueLog.STATUS_DONE.equals(newStatus) && QueueLog.STATUS_IN_QUEUE.equals(queueEntry.getStatus())) {
+            try {
+                QueuePositionDTO positionDTO = getQueuePosition(queueEntry.getAppointmentId());
+                queuePosition = positionDTO.getPosition();
+            } catch (QueueException e) {
+                log.warn("Could not get queue position before status change: {}", e.getMessage());
+            }
+        }
+
         // Update status
         queueEntry.setStatus(newStatus);
         QueueLog saved = queueRepository.save(queueEntry);
 
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
+
+        // If status changed to DONE, send "your turn" notification
+        if (QueueLog.STATUS_DONE.equals(newStatus)) {
+            log.info("Status changed to DONE for queue entry {}, sending 'your turn' notification",
+                    queueEntry.getQueueId());
+            sendYourTurnNotification(queueEntry, queuePosition);
+        }
+
+        // If status changed to MISSED, the next person in queue (now position 1) should
+        // get "your turn" notification
+        if (QueueLog.STATUS_MISSED.equals(newStatus)) {
+            log.info(
+                    "Status changed to MISSED for queue entry {}, checking if next patient should get 'your turn' notification",
+                    queueEntry.getClinicId());
+        }
+
+        // Check and send queue position notifications (position 1 and position 3)
+        // This will send "your turn" to the new position 1 if someone was marked as
+        // MISSED or DONE
+        checkAndSendQueueNotifications(queueEntry.getClinicId());
 
         return saved;
     }
@@ -216,12 +267,13 @@ public class QueueService {
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
 
-        // Verify original MISSED entry exists
-        Optional<QueueLog> missedEntry = queueRepository.findByAppointmentIdAndStatus(
-                appointmentId,
-                QueueLog.STATUS_MISSED);
+        // Verify original MISSED entry exists (check if there's at least one MISSED
+        // entry)
+        boolean hasMissedEntry = queueRepository.findByAppointmentId(appointmentId)
+                .stream()
+                .anyMatch(entry -> QueueLog.STATUS_MISSED.equals(entry.getStatus()));
 
-        if (missedEntry.isEmpty()) {
+        if (!hasMissedEntry) {
             throw new QueueException("No MISSED queue entry found for appointment ID: " + appointmentId);
         }
 
@@ -235,6 +287,9 @@ public class QueueService {
 
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
+
+        // Check and send queue position notifications (position 1 and position 3)
+        checkAndSendQueueNotifications(appointment.getClinicId());
 
         return saved;
     }
@@ -289,24 +344,49 @@ public class QueueService {
      * Get all missed queue entries for a clinic
      * Used to identify patients who didn't show up and can be re-queued
      * Excludes appointments that have a DONE status (already completed)
+     * Excludes appointments that are currently IN_QUEUE (already re-queued)
+     * Groups by appointmentId and returns only the latest missed entry per
+     * appointment
      *
      * @param clinicId ID of the clinic
-     * @return List of missed queue entries that can still be re-queued
+     * @return List of missed queue entries that can still be re-queued (one per
+     *         appointment)
      */
     @Transactional(readOnly = true)
     public List<QueueLog> getMissedQueueEntries(Long clinicId) {
         // Get all MISSED entries for the clinic
         List<QueueLog> missedEntries = queueRepository.findByClinicIdAndStatus(clinicId, QueueLog.STATUS_MISSED);
 
+        // Group by appointmentId and keep only the latest missed entry (by createdAt)
+        // for each appointment
+        List<QueueLog> latestMissedEntries = missedEntries.stream()
+                .collect(Collectors.groupingBy(
+                        QueueLog::getAppointmentId,
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                entries -> entries.stream()
+                                        .max((e1, e2) -> e1.getCreatedAt().compareTo(e2.getCreatedAt()))
+                                        .orElse(null))))
+                .values()
+                .stream()
+                .filter(entry -> entry != null)
+                .collect(Collectors.toList());
+
         // Filter out appointments that have a DONE status (already completed)
-        return missedEntries.stream()
+        // Filter out appointments that are IN_QUEUE (already re-queued - they're in the
+        // queue section)
+        return latestMissedEntries.stream()
                 .filter(entry -> {
                     // Check if this appointment has a DONE entry
                     boolean hasDoneEntry = queueRepository.existsByAppointmentIdAndStatus(
                             entry.getAppointmentId(),
                             QueueLog.STATUS_DONE);
-                    // Only include if it doesn't have a DONE entry (can still be re-queued)
-                    return !hasDoneEntry;
+                    // Check if this appointment is currently IN_QUEUE
+                    boolean isInQueue = queueRepository.existsByAppointmentIdAndStatus(
+                            entry.getAppointmentId(),
+                            QueueLog.STATUS_IN_QUEUE);
+                    // Only include if it doesn't have a DONE entry and is not currently IN_QUEUE
+                    return !hasDoneEntry && !isInQueue;
                 })
                 .collect(Collectors.toList());
     }
@@ -320,11 +400,26 @@ public class QueueService {
         // Fetch appointment details if needed
         Optional<Appointment> appointment = appointmentRepository.findById(queueLog.getAppointmentId());
 
+        // Fetch patient details to get name
+        String patientName = null;
+        if (appointment.isPresent() && appointment.get().getPatientId() != null) {
+            Optional<Patient> patient = patientRepository.findById(appointment.get().getPatientId());
+            if (patient.isPresent()) {
+                String fname = patient.get().getFname() != null ? patient.get().getFname() : "";
+                String lname = patient.get().getLname() != null ? patient.get().getLname() : "";
+                patientName = (fname + " " + lname).trim();
+                if (patientName.isEmpty()) {
+                    patientName = null;
+                }
+            }
+        }
+
         return QueueEntryDTO.builder()
                 .queueId(queueLog.getQueueId())
                 .clinicId(queueLog.getClinicId())
                 .appointmentId(queueLog.getAppointmentId())
                 .patientId(appointment.map(Appointment::getPatientId).orElse(null))
+                .patientName(patientName)
                 .doctorId(appointment.map(Appointment::getDoctorId).orElse(null))
                 .appointmentDateTime(appointment.map(Appointment::getDateTime).orElse(null))
                 .status(queueLog.getStatus())
@@ -359,5 +454,161 @@ public class QueueService {
             return 0;
         }
         return (position - 1) * 10; // 10 minutes per patient
+    }
+
+    /**
+     * Formats first and last name with proper spacing
+     */
+    private String formatFullName(String fname, String lname) {
+        String firstName = fname != null ? fname.trim() : "";
+        String lastName = lname != null ? lname.trim() : "";
+
+        if (firstName.isEmpty() && lastName.isEmpty()) {
+            return "";
+        } else if (firstName.isEmpty()) {
+            return lastName;
+        } else if (lastName.isEmpty()) {
+            return firstName;
+        } else {
+            return firstName + " " + lastName;
+        }
+    }
+
+    /**
+     * Sends "your turn" notification when patient is at position 1 in queue
+     * or when their queue status changes to DONE
+     */
+    private void sendYourTurnNotification(QueueLog queueEntry, int queuePosition) {
+        try {
+            Appointment appointment = appointmentRepository.findById(queueEntry.getAppointmentId()).orElse(null);
+            if (appointment == null) {
+                log.warn("Cannot send 'your turn' notification: appointment not found for queue entry {}",
+                        queueEntry.getQueueId());
+                return;
+            }
+
+            Patient patient = patientRepository.findById(appointment.getPatientId()).orElse(null);
+            Clinic clinic = clinicRepository.findById(appointment.getClinicId()).orElse(null);
+            Doctor doctor = doctorRepository.findById(appointment.getDoctorId()).orElse(null);
+
+            if (patient == null || clinic == null || doctor == null || patient.getEmail() == null) {
+                log.warn(
+                        "Cannot send 'your turn' notification: missing patient, clinic, doctor, or email for queue entry {}",
+                        queueEntry.getQueueId());
+                return;
+            }
+
+            // Build notification request
+            String patientName = formatFullName(patient.getFname(), patient.getLname());
+            String doctorName = formatFullName(doctor.getFname(), doctor.getLname());
+            String appointmentDateTime = appointment.getDateTime().format(DATE_TIME_FORMATTER);
+
+            NotificationRequest request = new NotificationRequest();
+            request.setToEmail(patient.getEmail());
+            request.setPatientName(patientName);
+            request.setClinicName(clinic.getName());
+            request.setDoctorName(doctorName);
+            request.setAppointmentDateTime(appointmentDateTime);
+            request.setQueueNumber(queuePosition);
+            request.setRoomNumber(null); // Room number - can be enhanced later if available
+            request.setAppointmentNumber(appointment.getAppointmentId());
+
+            log.info("Attempting to send 'your turn' email to {} for appointment {} (queue entry {})",
+                    patient.getEmail(), appointment.getAppointmentId(), queueEntry.getQueueId());
+            notificationService.sendYourTurnEmail(request);
+            log.info("Successfully sent 'your turn' notification to {} for appointment {}", patient.getEmail(),
+                    appointment.getAppointmentId());
+
+        } catch (IOException e) {
+            log.error("Failed to send 'your turn' notification for queue entry {}: {}",
+                    queueEntry.getQueueId(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error sending 'your turn' notification for queue entry {}: {}",
+                    queueEntry.getQueueId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Checks all patients in queue and sends notifications:
+     * - "your turn" notification to patients at position 1
+     * - "three away" notification to patients at position 3
+     */
+    private void checkAndSendQueueNotifications(Long clinicId) {
+        try {
+            List<QueueLog> queueEntries = getClinicQueue(clinicId);
+            log.debug("Checking queue notifications for clinic {}, queue size: {}", clinicId, queueEntries.size());
+
+            for (int i = 0; i < queueEntries.size(); i++) {
+                int position = i + 1;
+                QueueLog queueEntry = queueEntries.get(i);
+
+                // Send "your turn" notification to patient at position 1
+                if (position == 1) {
+                    log.info("Patient at position 1 found (appointment {}), sending 'your turn' notification",
+                            queueEntry.getAppointmentId());
+                    sendYourTurnNotification(queueEntry, position);
+                }
+                // Send "three away" notification to patient at position 3
+                else if (position == 3) {
+                    log.debug("Patient at position 3 found (appointment {}), sending 'three away' notification",
+                            queueEntry.getAppointmentId());
+                    sendThreeAwayNotification(queueEntry, position);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error checking and sending queue notifications for clinic {}: {}",
+                    clinicId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Sends "three away" notification to a patient
+     */
+    private void sendThreeAwayNotification(QueueLog queueEntry, int position) {
+        try {
+            Appointment appointment = appointmentRepository.findById(queueEntry.getAppointmentId()).orElse(null);
+            if (appointment == null) {
+                log.warn("Cannot send 'three away' notification: appointment not found for queue entry {}",
+                        queueEntry.getQueueId());
+                return;
+            }
+
+            Patient patient = patientRepository.findById(appointment.getPatientId()).orElse(null);
+            Clinic clinic = clinicRepository.findById(appointment.getClinicId()).orElse(null);
+            Doctor doctor = doctorRepository.findById(appointment.getDoctorId()).orElse(null);
+
+            if (patient == null || clinic == null || doctor == null || patient.getEmail() == null) {
+                log.warn(
+                        "Cannot send 'three away' notification: missing patient, clinic, doctor, or email for queue entry {}",
+                        queueEntry.getQueueId());
+                return;
+            }
+
+            // Build notification request
+            String patientName = formatFullName(patient.getFname(), patient.getLname());
+            String doctorName = formatFullName(doctor.getFname(), doctor.getLname());
+            String appointmentDateTime = appointment.getDateTime().format(DATE_TIME_FORMATTER);
+
+            NotificationRequest request = new NotificationRequest();
+            request.setToEmail(patient.getEmail());
+            request.setPatientName(patientName);
+            request.setClinicName(clinic.getName());
+            request.setDoctorName(doctorName);
+            request.setAppointmentDateTime(appointmentDateTime);
+            request.setQueueNumber(position);
+            request.setRoomNumber(null); // Room number not applicable
+            request.setAppointmentNumber(appointment.getAppointmentId());
+
+            notificationService.sendThreePatientsAwayEmail(request);
+            log.info("Sent 'three away' notification to {} for appointment {}", patient.getEmail(),
+                    appointment.getAppointmentId());
+
+        } catch (IOException e) {
+            log.error("Failed to send 'three away' notification for queue entry {}: {}",
+                    queueEntry.getQueueId(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error sending 'three away' notification for queue entry {}: {}",
+                    queueEntry.getQueueId(), e.getMessage());
+        }
     }
 }
