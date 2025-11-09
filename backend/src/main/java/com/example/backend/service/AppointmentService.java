@@ -73,6 +73,9 @@ public class AppointmentService {
                     if (updatedAppointment.getApptStatus() != null) {
                         existingAppointment.setApptStatus(updatedAppointment.getApptStatus());
                     }
+                    if (updatedAppointment.getTreatmentSummary() != null) {
+                        existingAppointment.setTreatmentSummary(updatedAppointment.getTreatmentSummary());
+                    }
 
                     return appointmentRepository.save(existingAppointment);
                 });

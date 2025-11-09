@@ -47,6 +47,9 @@ public class Appointment {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "treatment_summary", columnDefinition = "text")
+    private String treatmentSummary;
+
     // Constructor with required fields
     public Appointment(Long patientId, Long clinicId, LocalDateTime dateTime) {
         this.patientId = patientId;
