@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.example.backend.dto.QueueEntryDTO;
 import com.example.backend.dto.QueuePositionDTO;
@@ -23,6 +25,7 @@ import com.example.backend.dto.RequeueRequestDTO;
 import com.example.backend.exception.QueueException;
 import com.example.backend.model.queue.QueueLog;
 import com.example.backend.service.QueueService;
+import com.example.backend.service.QueueSseService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -53,6 +56,7 @@ import lombok.RequiredArgsConstructor;
 public class QueueController {
 
     private final QueueService queueService;
+    private final QueueSseService queueSseService;
 
     /**
      * Check in a patient - create a new queue entry
@@ -138,6 +142,20 @@ public class QueueController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse(500, "Internal Server Error", e.getMessage()));
         }
+    }
+
+    /**
+     * Stream queue position updates via Server-Sent Events (SSE)
+     * Returns real-time queue position updates for a specific appointment
+     *
+     * @param appointmentId ID of the appointment to track
+     * @return SseEmitter for streaming queue position updates
+     *
+     * GET /api/queue/position/{appointmentId}/stream
+     */
+    @GetMapping(value = "/position/{appointmentId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamQueuePosition(@PathVariable Long appointmentId) {
+        return queueSseService.createConnection(appointmentId);
     }
 
     /**

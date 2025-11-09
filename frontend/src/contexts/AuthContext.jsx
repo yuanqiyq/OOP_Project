@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { userAPI } from '../lib/api'
+import { userAPI, adminAPI } from '../lib/api'
 
 const AuthContext = createContext({})
 
@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
       setUser(session?.user ?? null)
       originalSessionRef.current = session
       if (session?.user) {
-        fetchUserProfile(session.user.id)
+        fetchUserProfile(session.user.id, session.user.email)
       } else {
         setLoading(false)
       }
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
       if (!isRestoringSession) {
         setUser(session?.user ?? null)
         if (session?.user) {
-          await fetchUserProfile(session.user.id)
+          await fetchUserProfile(session.user.id, session.user.email)
         } else {
           setUserProfile(null)
           setLoading(false)
@@ -69,9 +69,31 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe()
   }, [])
 
-  const fetchUserProfile = async (authUuid) => {
+  const fetchUserProfile = async (authUuid, email = null) => {
     try {
-      // Try to get user by auth UUID from backend
+      // Get email if not provided
+      let userEmail = email
+      if (!userEmail) {
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        userEmail = currentUser?.email
+      }
+      
+      // First, try to get staff by email (staff are in a separate table)
+      if (userEmail) {
+        try {
+          const staff = await adminAPI.getStaffByEmail(userEmail)
+          if (staff) {
+            setUserProfile(staff)
+            setLoading(false)
+            return
+          }
+        } catch (staffError) {
+          // Staff not found, continue to check User table
+          console.log('Staff not found, checking User table:', staffError)
+        }
+      }
+      
+      // If not staff, try to get user from User table (for patients)
       const users = await userAPI.getAll()
       const profile = users.find(u => u.authUuid === authUuid)
       
@@ -125,7 +147,7 @@ export const AuthProvider = ({ children }) => {
           throw new Error(backendError.message || 'Failed to create patient account')
         }
         
-        await fetchUserProfile(data.user.id)
+        await fetchUserProfile(data.user.id, data.user.email)
       }
 
       return { data, error: null }
@@ -144,7 +166,7 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error
 
       if (data.user) {
-        await fetchUserProfile(data.user.id)
+        await fetchUserProfile(data.user.id, data.user.email)
       }
 
       return { data, error: null }

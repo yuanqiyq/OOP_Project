@@ -4,10 +4,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.backend.dto.QueueEntryDTO;
+import com.example.backend.event.QueueChangedEvent;
 import com.example.backend.dto.QueuePositionDTO;
 import com.example.backend.exception.QueueException;
 import com.example.backend.model.appointments.Appointment;
@@ -42,6 +44,7 @@ public class QueueService {
 
     private final QueueRepository queueRepository;
     private final AppointmentRepository appointmentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Check in a patient - create a new queue entry
@@ -74,7 +77,12 @@ public class QueueService {
             priority
         );
 
-        return queueRepository.save(queueEntry);
+        QueueLog saved = queueRepository.save(queueEntry);
+        
+        // Notify SSE listeners that queue changed
+        eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
+        
+        return saved;
     }
 
     /**
@@ -182,7 +190,12 @@ public class QueueService {
 
         // Update status
         queueEntry.setStatus(newStatus);
-        return queueRepository.save(queueEntry);
+        QueueLog saved = queueRepository.save(queueEntry);
+        
+        // Notify SSE listeners that queue changed
+        eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
+        
+        return saved;
     }
 
     /**
@@ -222,7 +235,12 @@ public class QueueService {
             newPriority
         );
 
-        return queueRepository.save(newQueueEntry);
+        QueueLog saved = queueRepository.save(newQueueEntry);
+        
+        // Notify SSE listeners that queue changed
+        eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));
+        
+        return saved;
     }
 
     /**

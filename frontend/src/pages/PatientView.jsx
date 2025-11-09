@@ -62,12 +62,40 @@ export default function PatientView() {
   }, [userProfile])
 
   useEffect(() => {
-    // Auto-refresh queue position if selected
+    // Use SSE for real-time queue position updates
     if (selectedAppointment && location.pathname.includes('/queue')) {
-      const interval = setInterval(() => {
-        checkQueuePosition(selectedAppointment)
-      }, 5000)
-      return () => clearInterval(interval)
+      let eventSource = null
+      
+      try {
+        eventSource = queueAPI.streamQueuePosition(
+          selectedAppointment,
+          (position) => {
+            // Update queue position on each SSE event
+            setQueuePosition(position)
+            setError('')
+          },
+          (error) => {
+            // Handle errors (connection lost, not in queue, etc.)
+            if (error.message?.includes('Not Found') || error.message?.includes('Not in queue')) {
+              setQueuePosition(null)
+            } else {
+              setError('Connection lost. Reconnecting...')
+              // EventSource will auto-reconnect
+            }
+            console.error('SSE error:', error)
+          }
+        )
+      } catch (err) {
+        console.error('Failed to create SSE connection:', err)
+        setError('Failed to connect to queue updates')
+      }
+      
+      return () => {
+        // Cleanup: close SSE connection
+        if (eventSource) {
+          eventSource.close()
+        }
+      }
     }
   }, [selectedAppointment, location])
 

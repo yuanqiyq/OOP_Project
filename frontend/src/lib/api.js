@@ -88,6 +88,30 @@ export const queueAPI = {
   }),
   getClinicQueue: (clinicId) => apiCall(`/queue/clinic/${clinicId}`),
   getQueuePosition: (appointmentId) => apiCall(`/queue/position/${appointmentId}`),
+  // SSE connection for real-time queue position updates
+  streamQueuePosition: (appointmentId, onUpdate, onError) => {
+    const eventSource = new EventSource(`${API_BASE_URL}/queue/position/${appointmentId}/stream`)
+    
+    eventSource.addEventListener('queue-update', (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        if (data.error) {
+          onError?.(new Error(data.error))
+        } else {
+          onUpdate(data)
+        }
+      } catch (err) {
+        onError?.(err)
+      }
+    })
+    
+    eventSource.onerror = (error) => {
+      onError?.(error)
+      eventSource.close()
+    }
+    
+    return eventSource
+  },
   updateStatus: (queueId, status) => apiCall(`/queue/${queueId}/status`, {
     method: 'PATCH',
     body: { status },
