@@ -135,6 +135,9 @@
 /* User Section */
 .navbar-user-section {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .navbar-user {
@@ -317,6 +320,38 @@
 
 .dropdown-item:hover svg {
   color: var(--teal-dark);
+}
+
+/* Logout button icon (for patient view) */
+.logout-btn-icon {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(78, 205, 196, 0.15);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--teal-primary);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.logout-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(78, 205, 196, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(78, 205, 196, 0.15);
+  color: var(--teal-dark);
+}
+
+.logout-btn-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Responsive */

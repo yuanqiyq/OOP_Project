@@ -1,0 +1,213 @@
+.patient-profile-view {
+  min-height: 100vh;
+  color: #2d2d2d;
+}
+
+.patient-profile-layout {
+  min-height: calc(100vh - 80px);
+}
+
+.patient-profile-main {
+  padding: 2rem;
+  overflow-x: hidden;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Section Cards - matching PatientView */
+.section-card {
+  background: var(--gradient-card);
+  border-radius: 20px;
+  padding: 2rem;
+  border: 1px solid rgba(78, 205, 196, 0.15);
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 24px rgba(78, 205, 196, 0.08);
+  transition: all 0.3s;
+}
+
+.section-card:hover {
+  box-shadow: 0 8px 32px rgba(78, 205, 196, 0.12);
+  border-color: rgba(78, 205, 196, 0.25);
+}
+
+.section-card h2 {
+  color: var(--teal-dark);
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+}
+
+.back-btn {
+  background: transparent;
+  border: 2px solid rgba(78, 205, 196, 0.2);
+  color: var(--teal-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: 1rem;
+}
+
+.back-btn:hover {
+  background: var(--gradient-glow);
+  border-color: var(--teal-primary);
+  transform: translateY(-2px);
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  color: var(--teal-dark);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  background: #ffffff;
+  border: 2px solid rgba(78, 205, 196, 0.2);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  color: #2d2d2d;
+  font-size: 1rem;
+  transition: all 0.3s;
+  font-family: inherit;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--teal-primary);
+  box-shadow: 0 0 0 4px var(--teal-glow);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.form-group select {
+  cursor: pointer;
+}
+
+.form-hint {
+  color: #888;
+  font-size: 0.85rem;
+  margin-top: -0.25rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+  justify-content: flex-end;
+}
+
+/* Buttons - matching PatientView */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  box-shadow: 0 4px 12px rgba(78, 205, 196, 0.15);
+}
+
+.btn-primary {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  box-shadow: 0 6px 20px var(--teal-glow);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 30px var(--teal-glow);
+  filter: brightness(1.05);
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: var(--teal-primary);
+  border: 2px solid var(--teal-primary);
+  box-shadow: 0 4px 12px rgba(78, 205, 196, 0.1);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px var(--teal-glow);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Page Header - matching PatientView */
+.page-header {
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.page-header h1 {
+  color: var(--teal-dark);
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px var(--teal-glow));
+}
+
+.subtitle {
+  color: #666;
+  font-size: 1.1rem;
+  margin-top: 0.5rem;
+}
+
+.loading {
+  text-align: center;
+  color: #888;
+  padding: 3rem;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .patient-profile-main {
+    padding: 1rem;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+}
+

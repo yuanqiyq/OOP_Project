@@ -4,6 +4,7 @@ import { appointmentAPI, queueAPI, adminAPI, clinicAPI, doctorAPI } from '../lib
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
 import { useLocation } from 'react-router-dom'
+import PatientProfile from './PatientProfile'
 import './PatientView.css'
 
 export default function PatientView() {
@@ -363,6 +364,7 @@ export default function PatientView() {
   }
 
   const getCurrentView = () => {
+    if (location.pathname.includes('/profile')) return 'profile'
     if (location.pathname.includes('/medical-history')) return 'medical-history'
     if (location.pathname.includes('/appointments') || location.pathname.includes('/book')) return 'appointments'
     if (location.pathname.includes('/settings')) return 'settings'
@@ -1035,6 +1037,11 @@ export default function PatientView() {
     )
   }
 
+  // If on profile page, render PatientProfile component
+  if (getCurrentView() === 'profile') {
+    return <PatientProfile />
+  }
+
   return (
     <div className="patient-view">
       <Navbar />
@@ -1052,67 +1059,61 @@ export default function PatientView() {
           {currentView === 'dashboard' && (
             <>
               <div className="page-header">
-                <h1>Dashboard</h1>
+                <h1>Home</h1>
                 <p className="subtitle">Welcome back, {userProfile?.fname}!</p>
               </div>
 
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon">📅</div>
-                  <div className="stat-content">
-                    <h3>{stats.total}</h3>
-                    <p>Total Appointments</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">⏰</div>
-                  <div className="stat-content">
-                    <h3>{stats.upcoming}</h3>
-                    <p>Upcoming</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">✅</div>
-                  <div className="stat-content">
-                    <h3>{stats.completed}</h3>
-                    <p>Completed</p>
-                  </div>
+              {/* Queue Number Section - Center Stage */}
+              <div className="queue-display-section">
+                <div className="queue-display-card">
+                  <h2 className="queue-section-title">Your Queue Number</h2>
+                  {queuePosition && selectedAppointment ? (
+                    <div className="queue-active-display">
+                      <div className="queue-number-large">
+                        <span className="queue-number">{queuePosition.position || 'N/A'}</span>
+                      </div>
+                      <div className="queue-info">
+                        <div className="queue-info-item">
+                          <span className="queue-info-label">Total in Queue</span>
+                          <span className="queue-info-value">{queuePosition.totalInQueue || 'N/A'}</span>
+                        </div>
+                        <div className="queue-info-item">
+                          <span className="queue-info-label">Status</span>
+                          <span className="queue-info-value">{queuePosition.status || 'N/A'}</span>
+                        </div>
+                        <div className="queue-info-item">
+                          <span className="queue-info-label">Appointment</span>
+                          <span className="queue-info-value">#{selectedAppointment}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="queue-inactive-display">
+                      <div className="queue-inactive-icon">⏳</div>
+                      <p className="queue-inactive-message">You are not checked in</p>
+                      <p className="queue-inactive-submessage">Check in to an appointment to see your queue position</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {queuePosition && selectedAppointment && (
-                <div className="queue-status-card">
-                  <h2>Current Queue Status</h2>
-                  <div className="queue-status-content">
-                    <div className="queue-position-large">
-                      <span className="position-number">{queuePosition.position || 'N/A'}</span>
-                      <span className="position-label">Your Position</span>
-                    </div>
-                    <div className="queue-details">
-                      <p><strong>Total in Queue:</strong> {queuePosition.totalInQueue || 'N/A'}</p>
-                      <p><strong>Status:</strong> {queuePosition.status || 'N/A'}</p>
-                      <p><strong>Appointment ID:</strong> {selectedAppointment}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              {/* Upcoming Appointments Section */}
               <div className="section-card">
                 <div className="section-header">
-                  <h2>Recent Appointments</h2>
+                  <h2>Upcoming Appointments</h2>
                   <button onClick={fetchAppointments} className="btn btn-secondary btn-sm">
                     Refresh
                   </button>
                 </div>
                 {loading ? (
                   <div className="loading">Loading...</div>
-                ) : appointments.length === 0 ? (
+                ) : getFilteredAppointments().length === 0 ? (
                   <div className="empty-state">
-                    <p>No appointments found</p>
+                    <p>No upcoming appointments found</p>
                   </div>
                 ) : (
                   <div className="appointments-grid">
-                    {appointments.slice(0, 3).map((apt) => (
+                    {getFilteredAppointments().slice(0, 3).map((apt) => (
                       <div key={apt.appointmentId} className="appointment-card">
                         <div className="appointment-header">
                           <span className="appointment-id">#{apt.appointmentId}</span>
@@ -1125,9 +1126,16 @@ export default function PatientView() {
                             📅 {new Date(apt.dateTime).toLocaleDateString()}
                           </p>
                           <p className="appointment-time">
-                            🕐 {new Date(apt.dateTime).toLocaleTimeString()}
+                            🕐 {new Date(apt.dateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
                           </p>
-                          <p className="appointment-clinic">🏥 Clinic ID: {apt.clinicId}</p>
+                          <p className="appointment-clinic">
+                            🏥 {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
+                          </p>
+                          {apt.doctorId && (
+                            <p className="appointment-doctor">
+                              👨‍⚕️ {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
+                            </p>
+                          )}
                         </div>
                         <div className="appointment-actions">
                           <button
