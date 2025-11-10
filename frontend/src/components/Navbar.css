@@ -1,12 +1,12 @@
 .navbar {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.3);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   position: sticky;
   top: 0;
   z-index: 1000;
-  box-shadow: 0 2px 20px rgba(78, 205, 196, 0.08);
-  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
+  box-shadow: 0 2px 20px rgba(78, 205, 196, 0.05);
+  border-bottom: 1px solid rgba(78, 205, 196, 0.08);
 }
 
 .navbar-container {
