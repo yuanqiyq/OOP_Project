@@ -1422,6 +1422,116 @@ select.input-sm:focus {
   margin-bottom: 1.5rem;
 }
 
+/* Tabs */
+.tabs-container {
+  display: flex;
+  gap: 0.75rem;
+  border-bottom: 2px solid rgba(78, 205, 196, 0.15);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  position: relative;
+}
+
+.tab-btn:hover {
+  color: var(--teal-primary);
+  background: rgba(78, 205, 196, 0.05);
+}
+
+.tab-btn.active {
+  color: var(--teal-primary);
+  border-bottom-color: var(--teal-primary);
+  background: rgba(78, 205, 196, 0.05);
+}
+
+/* Clickable Appointment */
+.clickable-appointment {
+  transition: all 0.3s;
+}
+
+.clickable-appointment:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--teal-glow);
+}
+
+.expand-icon {
+  font-size: 0.9rem;
+  color: var(--teal-primary);
+  margin-left: auto;
+  transition: transform 0.3s;
+}
+
+.appointment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.appointment-header h3 {
+  margin: 0;
+  flex: 1;
+}
+
+/* Treatment Summary */
+.treatment-summary-section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid rgba(78, 205, 196, 0.15);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.treatment-summary-section h4 {
+  color: var(--teal-dark);
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.treatment-summary-content {
+  background: var(--gradient-glow);
+  padding: 1rem 1.5rem;
+  border-radius: 10px;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  color: #2d2d2d;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.no-treatment-summary {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+  background: var(--gradient-glow);
+  border-radius: 10px;
+  border: 1px dashed rgba(78, 205, 196, 0.2);
+}
+
 @media (max-width: 768px) {
   .patient-main {
     padding: 1rem;
@@ -1459,5 +1569,23 @@ select.input-sm:focus {
 
   .booking-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .tabs-container {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .tab-btn {
+    width: 100%;
+    text-align: left;
+    border-bottom: 1px solid rgba(78, 205, 196, 0.15);
+    border-left: 3px solid transparent;
+    margin-bottom: 0;
+  }
+
+  .tab-btn.active {
+    border-left-color: var(--teal-primary);
+    border-bottom-color: rgba(78, 205, 196, 0.15);
   }
 }

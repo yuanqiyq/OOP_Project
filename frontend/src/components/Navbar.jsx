@@ -31,9 +31,8 @@ export default function Navbar({ currentPage = 'dashboard' }) {
 
   const patientMenu = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', path: '/patient' },
-    { id: 'book-appointment', label: 'Book Appointment', icon: '➕', path: '/patient/book' },
-    { id: 'appointments', label: 'My Appointments', icon: '📅', path: '/patient/appointments' },
-    { id: 'queue', label: 'Queue Status', icon: '⏳', path: '/patient/queue' },
+    { id: 'appointments', label: 'Appointments', icon: '📅', path: '/patient/appointments' },
+    { id: 'medical-history', label: 'Medical History', icon: '🏥', path: '/patient/medical-history' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/patient/settings' },
   ]
 
@@ -82,9 +81,11 @@ export default function Navbar({ currentPage = 'dashboard' }) {
     return (
       currentPath === item.path || 
       (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
-       currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/queue') && !currentPath.includes('/settings') && !currentPath.includes('/book') ||
+       currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/settings') && !currentPath.includes('/medical-history') ||
        currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') && !currentPath.includes('/display') ||
        currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
+      (item.id === 'appointments' && (currentPath.startsWith('/patient/appointments') || currentPath.startsWith('/patient/book'))) ||
+      (item.id === 'medical-history' && currentPath.startsWith('/patient/medical-history')) ||
       (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
     )
   }

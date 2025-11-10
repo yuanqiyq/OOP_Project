@@ -25,6 +25,16 @@ export default function PatientView() {
   const [appointmentFilter, setAppointmentFilter] = useState('upcoming') // 'upcoming' or 'past'
   const [pastAppointmentDateFilter, setPastAppointmentDateFilter] = useState('')
   
+  // Appointments tab state (for the combined appointments page)
+  const [appointmentsTab, setAppointmentsTab] = useState(() => {
+    // Default to 'book' tab, but if on /patient/book, ensure it's set to 'book'
+    return location.pathname.includes('/book') ? 'book' : 'book'
+  }) // 'book' or 'upcoming'
+  
+  // Medical history state
+  const [expandedAppointmentId, setExpandedAppointmentId] = useState(null) // Track which appointment is expanded
+  const [medicalHistoryFilter, setMedicalHistoryFilter] = useState('past') // 'past' or 'archive'
+  
   // Reschedule state
   const [appointmentToReschedule, setAppointmentToReschedule] = useState(null)
   
@@ -102,8 +112,13 @@ export default function PatientView() {
   }, [doctors])
 
   useEffect(() => {
-    // Use SSE for real-time queue position updates
-    if (selectedAppointment && location.pathname.includes('/queue')) {
+    // Use SSE for real-time queue position updates (on dashboard)
+    const isDashboard = !location.pathname.includes('/appointments') && 
+                        !location.pathname.includes('/medical-history') && 
+                        !location.pathname.includes('/settings') &&
+                        !location.pathname.includes('/book')
+    
+    if (selectedAppointment && isDashboard) {
       let eventSource = null
       
       try {
@@ -208,40 +223,26 @@ export default function PatientView() {
     return diffInHours <= 24 && diffInHours >= 0
   }
 
-  // Filter appointments based on selected filter
+  // Filter appointments based on selected filter (for upcoming appointments tab)
   const getFilteredAppointments = () => {
     const now = new Date()
-    let filtered = appointments
+    // Always show upcoming appointments that are not cancelled for the upcoming tab
+    return appointments.filter(apt => 
+      new Date(apt.dateTime) > now && apt.apptStatus !== 'CANCELLED'
+    )
+  }
 
-    if (appointmentFilter === 'upcoming') {
-      // Show upcoming appointments that are not cancelled
-      filtered = appointments.filter(apt => 
-        new Date(apt.dateTime) > now && apt.apptStatus !== 'CANCELLED'
-      )
-    } else if (appointmentFilter === 'past') {
-      // Show past appointments that are not cancelled
-      filtered = appointments.filter(apt => 
-        new Date(apt.dateTime) <= now && apt.apptStatus !== 'CANCELLED'
-      )
-      
-      // Apply date filter if set
-      if (pastAppointmentDateFilter) {
-        const filterDate = new Date(pastAppointmentDateFilter)
-        filterDate.setHours(0, 0, 0, 0)
-        const nextDay = new Date(filterDate)
-        nextDay.setDate(nextDay.getDate() + 1)
-        
-        filtered = filtered.filter(apt => {
-          const aptDate = new Date(apt.dateTime)
-          return aptDate >= filterDate && aptDate < nextDay
-        })
-      }
-    } else if (appointmentFilter === 'archive') {
-      // Show only cancelled appointments
-      filtered = appointments.filter(apt => apt.apptStatus === 'CANCELLED')
-    }
+  // Get past appointments for medical history
+  const getPastAppointments = () => {
+    const now = new Date()
+    return appointments.filter(apt => 
+      new Date(apt.dateTime) <= now && apt.apptStatus !== 'CANCELLED'
+    )
+  }
 
-    return filtered
+  // Get cancelled appointments for archive
+  const getCancelledAppointments = () => {
+    return appointments.filter(apt => apt.apptStatus === 'CANCELLED')
   }
 
   // Handle reschedule button click
@@ -362,16 +363,24 @@ export default function PatientView() {
   }
 
   const getCurrentView = () => {
-    if (location.pathname.includes('/book')) return 'book'
-    if (location.pathname.includes('/appointments')) return 'appointments'
-    if (location.pathname.includes('/queue')) return 'queue'
+    if (location.pathname.includes('/medical-history')) return 'medical-history'
+    if (location.pathname.includes('/appointments') || location.pathname.includes('/book')) return 'appointments'
     if (location.pathname.includes('/settings')) return 'settings'
     return 'dashboard'
   }
 
+  // Update appointments tab when navigating
+  useEffect(() => {
+    if (getCurrentView() === 'appointments') {
+      if (location.pathname.includes('/book')) {
+        setAppointmentsTab('book')
+      }
+    }
+  }, [location.pathname])
+
   // Fetch clinics and doctors for booking
   useEffect(() => {
-    if (getCurrentView() === 'book') {
+    if (getCurrentView() === 'appointments') {
       fetchClinics()
       fetchDoctors()
       requestLocationPermission()
@@ -380,7 +389,7 @@ export default function PatientView() {
 
   // Filter clinics when filters change
   useEffect(() => {
-    if (getCurrentView() === 'book') {
+    if (getCurrentView() === 'appointments') {
       applyFilters()
       setCurrentPage(1) // Reset to first page when filters change
     }
@@ -389,7 +398,7 @@ export default function PatientView() {
 
   // Update displayed clinics when filtered clinics or page changes
   useEffect(() => {
-    if (getCurrentView() === 'book') {
+    if (getCurrentView() === 'appointments') {
       updateDisplayedClinics()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1140,83 +1149,496 @@ export default function PatientView() {
           {currentView === 'appointments' && (
             <>
               <div className="page-header">
-                <h1>My Appointments</h1>
+                <h1>Appointments</h1>
               </div>
 
-              {/* Appointment Filter */}
+              {/* Tabs */}
               <div className="section-card">
-                <div className="appointment-filters">
-                  <div className="filter-group">
-                    <label>Filter Appointments</label>
-                    <div className="filter-buttons">
-                      <button
-                        className={`filter-btn ${appointmentFilter === 'upcoming' ? 'active' : ''}`}
-                        onClick={() => {
-                          setAppointmentFilter('upcoming')
-                          setPastAppointmentDateFilter('')
-                        }}
-                      >
-                        Upcoming
-                      </button>
-                      <button
-                        className={`filter-btn ${appointmentFilter === 'past' ? 'active' : ''}`}
-                        onClick={() => {
-                          setAppointmentFilter('past')
-                          setPastAppointmentDateFilter('')
-                        }}
-                      >
-                        Past Appointments
-                      </button>
-                      <button
-                        className={`filter-btn ${appointmentFilter === 'archive' ? 'active' : ''}`}
-                        onClick={() => {
-                          setAppointmentFilter('archive')
-                          setPastAppointmentDateFilter('')
-                        }}
-                      >
-                        Archive
-                      </button>
-                    </div>
-                  </div>
-                  {appointmentFilter === 'past' && (
-                    <div className="filter-group">
-                      <label>Filter by Date</label>
-                      <input
-                        type="date"
-                        value={pastAppointmentDateFilter}
-                        onChange={(e) => setPastAppointmentDateFilter(e.target.value)}
-                        className="input-sm"
-                        max={new Date().toISOString().split('T')[0]}
-                      />
-                    </div>
-                  )}
+                <div className="tabs-container">
+                  <button
+                    className={`tab-btn ${appointmentsTab === 'book' ? 'active' : ''}`}
+                    onClick={() => setAppointmentsTab('book')}
+                  >
+                    Book New Appointment
+                  </button>
+                  <button
+                    className={`tab-btn ${appointmentsTab === 'upcoming' ? 'active' : ''}`}
+                    onClick={() => setAppointmentsTab('upcoming')}
+                  >
+                    Upcoming Appointments
+                  </button>
                 </div>
               </div>
 
-              <div className="section-card">
-                {loading ? (
-                  <div className="loading">Loading...</div>
-                ) : getFilteredAppointments().length === 0 ? (
-                  <div className="empty-state">
-                    <p>
-                      {appointmentFilter === 'archive' 
-                        ? 'No cancelled appointments found' 
-                        : `No ${appointmentFilter} appointments found`}
-                    </p>
+              {/* Book New Appointment Tab */}
+              {appointmentsTab === 'book' && (
+                <>
+                  {/* Filters Section */}
+                  <div className="section-card">
+                    <h2>Search & Filter</h2>
+                    <div className="filters-grid">
+                      <div className="form-group">
+                        <label>Doctor</label>
+                        <div className="searchable-dropdown">
+                          <input
+                            type="text"
+                            placeholder="Search by doctor name"
+                            value={filterDoctorSearch}
+                            onChange={(e) => {
+                              setFilterDoctorSearch(e.target.value)
+                              setShowDoctorDropdown(true)
+                            }}
+                            onFocus={() => setShowDoctorDropdown(true)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="input-sm"
+                          />
+                          {showDoctorDropdown && getFilteredDoctors().length > 0 && (
+                            <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                              {getFilteredDoctors().map((doctor) => (
+                                <div
+                                  key={doctor.id}
+                                  className="dropdown-item"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setFilterDoctor(doctor.id.toString())
+                                    setFilterDoctorSearch(`${doctor.fname} ${doctor.lname}`)
+                                    setShowDoctorDropdown(false)
+                                  }}
+                                >
+                                  Dr. {doctor.fname} {doctor.lname}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {filterDoctor && (
+                            <button
+                              className="clear-filter-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFilterDoctor('')
+                                setFilterDoctorSearch('')
+                              }}
+                              type="button"
+                              aria-label="Clear doctor filter"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Clinic Name</label>
+                        <input
+                          type="text"
+                          placeholder="Search clinics"
+                          value={filterClinic}
+                          onChange={(e) => setFilterClinic(e.target.value)}
+                          className="input-sm"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Region</label>
+                        <div className="searchable-dropdown">
+                          <input
+                            type="text"
+                            placeholder="Search by region"
+                            value={filterRegionSearch}
+                            onChange={(e) => {
+                              setFilterRegionSearch(e.target.value)
+                              setShowRegionDropdown(true)
+                            }}
+                            onFocus={() => setShowRegionDropdown(true)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="input-sm"
+                          />
+                          {showRegionDropdown && getFilteredRegions().length > 0 && (
+                            <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                              {getFilteredRegions().map((region) => (
+                                <div
+                                  key={region}
+                                  className="dropdown-item"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setFilterRegion(region)
+                                    setFilterRegionSearch(region)
+                                    setShowRegionDropdown(false)
+                                  }}
+                                >
+                                  {region}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {filterRegion && (
+                            <button
+                              className="clear-filter-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFilterRegion('')
+                                setFilterRegionSearch('')
+                              }}
+                              type="button"
+                              aria-label="Clear region filter"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Specialty</label>
+                        <div className="searchable-dropdown">
+                          <input
+                            type="text"
+                            placeholder="Search by specialty"
+                            value={filterSpecialtySearch}
+                            onChange={(e) => {
+                              setFilterSpecialtySearch(e.target.value)
+                              setShowSpecialtyDropdown(true)
+                            }}
+                            onFocus={() => setShowSpecialtyDropdown(true)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="input-sm"
+                          />
+                          {showSpecialtyDropdown && getFilteredSpecialties().length > 0 && (
+                            <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                              {getFilteredSpecialties().map((specialty) => (
+                                <div
+                                  key={specialty}
+                                  className="dropdown-item"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setFilterSpecialty(specialty)
+                                    setFilterSpecialtySearch(specialty)
+                                    setShowSpecialtyDropdown(false)
+                                  }}
+                                >
+                                  {specialty}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {filterSpecialty && (
+                            <button
+                              className="clear-filter-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFilterSpecialty('')
+                                setFilterSpecialtySearch('')
+                              }}
+                              type="button"
+                              aria-label="Clear specialty filter"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {locationPermission === 'denied' && (
+                      <div className="location-warning">
+                        <p>📍 Location permission denied. Clinics will not be sorted by distance.</p>
+                        <button onClick={requestLocationPermission} className="btn btn-secondary btn-sm">
+                          Request Location Again
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="appointments-list">
-                    {getFilteredAppointments().map((apt) => {
-                      const within24Hours = isWithin24Hours(apt.dateTime)
-                      return (
+
+                  {/* Clinic Selection */}
+                  <div className="section-card">
+                    <div className="section-header">
+                      <h2>Select Clinic</h2>
+                      {userLocation && (
+                        <span className="location-badge">📍 Sorted by distance</span>
+                      )}
+                    </div>
+                    {loading ? (
+                      <div className="loading">Loading clinics...</div>
+                    ) : displayedClinics.length === 0 ? (
+                      <div className="empty-state">
+                        <p>No clinics found matching your filters</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="clinics-grid">
+                          {displayedClinics.map((clinic) => (
+                            <div
+                              key={clinic.id}
+                              className="clinic-card"
+                              onClick={() => handleClinicClick(clinic)}
+                            >
+                              <div className="clinic-header">
+                                <h3>{clinic.name}</h3>
+                              </div>
+                              <div className="clinic-details">
+                                <p><strong>Clinic ID:</strong> {clinic.id}</p>
+                                <p><strong>Address:</strong> {clinic.address}</p>
+                                {clinic.region && <p><strong>Region:</strong> {clinic.region}</p>}
+                                {clinic.specialty && <p><strong>Specialty:</strong> {clinic.specialty}</p>}
+                                {clinic.telephoneNo && <p><strong>Phone:</strong> {clinic.telephoneNo}</p>}
+                                {clinic.distance !== null && clinic.distance !== undefined && (
+                                  <p className="distance-info">
+                                    <strong>Distance:</strong> {clinic.distance.toFixed(2)} km away
+                                  </p>
+                                )}
+                                {formatOpeningHours(clinic) && (
+                                  <div className="opening-hours">
+                                    <p><strong>Opening Hours:</strong></p>
+                                    <div className="opening-hours-list">
+                                      {formatOpeningHours(clinic).map((schedule, index) => (
+                                        <div key={index} className="opening-hours-item">
+                                          <span className="opening-hours-day">{schedule.day}:</span>
+                                          <span className="opening-hours-time">{schedule.times}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                          <div className="pagination">
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                              disabled={currentPage === 1}
+                            >
+                              Previous
+                            </button>
+                            <span className="pagination-info">
+                              Page {currentPage} of {totalPages}
+                            </span>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                              disabled={currentPage === totalPages}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Upcoming Appointments Tab */}
+              {appointmentsTab === 'upcoming' && (
+                <div className="section-card">
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getFilteredAppointments().length === 0 ? (
+                    <div className="empty-state">
+                      <p>No upcoming appointments found</p>
+                    </div>
+                  ) : (
+                    <div className="appointments-list">
+                      {getFilteredAppointments().map((apt) => {
+                        const within24Hours = isWithin24Hours(apt.dateTime)
+                        return (
+                          <div key={apt.appointmentId} className="appointment-card-large">
+                            <div className="appointment-main">
+                              <div className="appointment-header">
+                                <h3>Appointment #{apt.appointmentId}</h3>
+                              </div>
+                              <div className="appointment-status-badge">
+                                <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                  {apt.apptStatus || 'PENDING'}
+                                </span>
+                              </div>
+                              <div className="appointment-details">
+                                <div className="detail-item">
+                                  <span className="detail-label">Date & Time:</span>
+                                  <span className="detail-value">
+                                    {new Date(apt.dateTime).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Clinic:</span>
+                                  <span className="detail-value">
+                                    {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
+                                  </span>
+                                </div>
+                                {apt.doctorId && (
+                                  <div className="detail-item">
+                                    <span className="detail-label">Doctor:</span>
+                                    <span className="detail-value">
+                                      {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="appointment-actions-vertical">
+                              {apt.apptStatus !== 'CANCELLED' && (
+                                <>
+                                  <button
+                                    onClick={() => handleRescheduleClick(apt)}
+                                    className="btn btn-primary reschedule-btn"
+                                    disabled={loading || within24Hours}
+                                  >
+                                    Reschedule
+                                  </button>
+                                  <button
+                                    onClick={() => handleCancelClick(apt)}
+                                    className="btn btn-warning reschedule-btn"
+                                    disabled={loading || within24Hours}
+                                  >
+                                    Cancel
+                                  </button>
+                                  {within24Hours && (
+                                    <p className="reschedule-disabled-message">
+                                      Cannot reschedule or cancel appointments within 24 hours
+                                    </p>
+                                  )}
+                                </>
+                              )}
+                              {apt.apptStatus === 'CANCELLED' && (
+                                <p className="reschedule-disabled-message">
+                                  This appointment has been cancelled
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Medical History View */}
+          {currentView === 'medical-history' && (
+            <>
+              <div className="page-header">
+                <h1>Medical History</h1>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="section-card">
+                <div className="tabs-container">
+                  <button
+                    className={`tab-btn ${medicalHistoryFilter === 'past' ? 'active' : ''}`}
+                    onClick={() => {
+                      setMedicalHistoryFilter('past')
+                      setExpandedAppointmentId(null)
+                    }}
+                  >
+                    Past Appointments
+                  </button>
+                  <button
+                    className={`tab-btn ${medicalHistoryFilter === 'archive' ? 'active' : ''}`}
+                    onClick={() => {
+                      setMedicalHistoryFilter('archive')
+                      setExpandedAppointmentId(null)
+                    }}
+                  >
+                    Archive (Cancelled)
+                  </button>
+                </div>
+              </div>
+
+              {/* Past Appointments Tab */}
+              {medicalHistoryFilter === 'past' && (
+                <div className="section-card">
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getPastAppointments().length === 0 ? (
+                    <div className="empty-state">
+                      <p>No past appointments found</p>
+                    </div>
+                  ) : (
+                    <div className="appointments-list">
+                      {getPastAppointments().map((apt) => {
+                        const isExpanded = expandedAppointmentId === apt.appointmentId
+                        return (
+                          <div key={apt.appointmentId} className="appointment-card-large clickable-appointment">
+                            <div 
+                              className="appointment-main"
+                              onClick={() => setExpandedAppointmentId(isExpanded ? null : apt.appointmentId)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="appointment-header">
+                                <h3>Appointment #{apt.appointmentId}</h3>
+                                <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
+                              </div>
+                              <div className="appointment-status-badge">
+                                <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                  {apt.apptStatus || 'PENDING'}
+                                </span>
+                              </div>
+                              <div className="appointment-details">
+                                <div className="detail-item">
+                                  <span className="detail-label">Date & Time:</span>
+                                  <span className="detail-value">
+                                    {new Date(apt.dateTime).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="detail-item">
+                                  <span className="detail-label">Clinic:</span>
+                                  <span className="detail-value">
+                                    {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
+                                  </span>
+                                </div>
+                                {apt.doctorId && (
+                                  <div className="detail-item">
+                                    <span className="detail-label">Doctor:</span>
+                                    <span className="detail-value">
+                                      {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {isExpanded && apt.treatmentSummary && (
+                                <div className="treatment-summary-section">
+                                  <h4>Treatment Summary</h4>
+                                  <div className="treatment-summary-content">
+                                    {apt.treatmentSummary}
+                                  </div>
+                                </div>
+                              )}
+                              {isExpanded && !apt.treatmentSummary && (
+                                <div className="treatment-summary-section">
+                                  <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Archive (Cancelled) Tab */}
+              {medicalHistoryFilter === 'archive' && (
+                <div className="section-card">
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getCancelledAppointments().length === 0 ? (
+                    <div className="empty-state">
+                      <p>No cancelled appointments found</p>
+                    </div>
+                  ) : (
+                    <div className="appointments-list">
+                      {getCancelledAppointments().map((apt) => (
                         <div key={apt.appointmentId} className="appointment-card-large">
                           <div className="appointment-main">
                             <div className="appointment-header">
                               <h3>Appointment #{apt.appointmentId}</h3>
                             </div>
                             <div className="appointment-status-badge">
-                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                                {apt.apptStatus || 'PENDING'}
+                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'cancelled'}`}>
+                                {apt.apptStatus || 'CANCELLED'}
                               </span>
                             </div>
                             <div className="appointment-details">
@@ -1242,378 +1664,12 @@ export default function PatientView() {
                               )}
                             </div>
                           </div>
-                          <div className="appointment-actions-vertical">
-                            {apt.apptStatus !== 'CANCELLED' && (
-                              <>
-                                <button
-                                  onClick={() => handleRescheduleClick(apt)}
-                                  className="btn btn-primary reschedule-btn"
-                                  disabled={loading || within24Hours || appointmentFilter === 'past' || appointmentFilter === 'archive'}
-                                >
-                                  Reschedule
-                                </button>
-                                <button
-                                  onClick={() => handleCancelClick(apt)}
-                                  className="btn btn-warning reschedule-btn"
-                                  disabled={loading || within24Hours || appointmentFilter === 'past' || appointmentFilter === 'archive'}
-                                >
-                                  Cancel
-                                </button>
-                                {within24Hours && (
-                                  <p className="reschedule-disabled-message">
-                                    Cannot reschedule or cancel appointments within 24 hours
-                                  </p>
-                                )}
-                              </>
-                            )}
-                            {apt.apptStatus === 'CANCELLED' && (
-                              <p className="reschedule-disabled-message">
-                                This appointment has been cancelled
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {currentView === 'queue' && (
-            <>
-              <div className="page-header">
-                <h1>Queue Status</h1>
-                <button onClick={fetchAppointments} className="btn btn-secondary">
-                  Refresh
-                </button>
-              </div>
-
-              {selectedAppointment ? (
-                <div className="section-card">
-                  {queuePosition ? (
-                    <>
-                      <div className="queue-display-large">
-                        <div className="queue-position-circle">
-                          <span className="position-big">{queuePosition.position || 'N/A'}</span>
-                          <span className="position-text">Position in Queue</span>
-                        </div>
-                        <div className="queue-stats">
-                          <div className="queue-stat-item">
-                            <span className="stat-label">Total in Queue</span>
-                            <span className="stat-value">{queuePosition.totalInQueue || 'N/A'}</span>
-                          </div>
-                          <div className="queue-stat-item">
-                            <span className="stat-label">Status</span>
-                            <span className="stat-value">{queuePosition.status || 'N/A'}</span>
-                          </div>
-                          <div className="queue-stat-item">
-                            <span className="stat-label">Appointment ID</span>
-                            <span className="stat-value">{selectedAppointment}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedAppointment(null)
-                          setQueuePosition(null)
-                        }}
-                        className="btn btn-secondary"
-                      >
-                        Check Another Appointment
-                      </button>
-                    </>
-                  ) : (
-                    <div className="empty-state">
-                      <p>Not in queue. Check in to an appointment first.</p>
-                      <button
-                        onClick={() => window.location.hash = '#appointments'}
-                        className="btn btn-primary"
-                      >
-                        View Appointments
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="section-card">
-                  <p>Select an appointment to view queue status</p>
-                  <div className="appointments-grid">
-                    {appointments.map((apt) => (
-                      <button
-                        key={apt.appointmentId}
-                        onClick={() => checkQueuePosition(apt.appointmentId)}
-                        className="appointment-card appointment-select"
-                      >
-                        Appointment #{apt.appointmentId}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {currentView === 'book' && (
-            <>
-              <div className="page-header">
-                <h1>Book Appointment</h1>
-              </div>
-              
-
-              {/* Filters Section */}
-              <div className="section-card">
-                <h2>Search & Filter</h2>
-                <div className="filters-grid">
-                  <div className="form-group">
-                    <label>Doctor</label>
-                    <div className="searchable-dropdown">
-                      <input
-                        type="text"
-                        placeholder="Search by doctor name"
-                        value={filterDoctorSearch}
-                        onChange={(e) => {
-                          setFilterDoctorSearch(e.target.value)
-                          setShowDoctorDropdown(true)
-                        }}
-                        onFocus={() => setShowDoctorDropdown(true)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="input-sm"
-                      />
-                      {showDoctorDropdown && getFilteredDoctors().length > 0 && (
-                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                          {getFilteredDoctors().map((doctor) => (
-                            <div
-                              key={doctor.id}
-                              className="dropdown-item"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setFilterDoctor(doctor.id.toString())
-                                setFilterDoctorSearch(`${doctor.fname} ${doctor.lname}`)
-                                setShowDoctorDropdown(false)
-                              }}
-                            >
-                              Dr. {doctor.fname} {doctor.lname}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {filterDoctor && (
-                        <button
-                          className="clear-filter-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setFilterDoctor('')
-                            setFilterDoctorSearch('')
-                          }}
-                          type="button"
-                          aria-label="Clear doctor filter"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Clinic Name</label>
-                    <input
-                      type="text"
-                      placeholder="Search clinics"
-                      value={filterClinic}
-                      onChange={(e) => setFilterClinic(e.target.value)}
-                      className="input-sm"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Region</label>
-                    <div className="searchable-dropdown">
-                      <input
-                        type="text"
-                        placeholder="Search by region"
-                        value={filterRegionSearch}
-                        onChange={(e) => {
-                          setFilterRegionSearch(e.target.value)
-                          setShowRegionDropdown(true)
-                        }}
-                        onFocus={() => setShowRegionDropdown(true)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="input-sm"
-                      />
-                      {showRegionDropdown && getFilteredRegions().length > 0 && (
-                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                          {getFilteredRegions().map((region) => (
-                            <div
-                              key={region}
-                              className="dropdown-item"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setFilterRegion(region)
-                                setFilterRegionSearch(region)
-                                setShowRegionDropdown(false)
-                              }}
-                            >
-                              {region}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {filterRegion && (
-                        <button
-                          className="clear-filter-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setFilterRegion('')
-                            setFilterRegionSearch('')
-                          }}
-                          type="button"
-                          aria-label="Clear region filter"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Specialty</label>
-                    <div className="searchable-dropdown">
-                      <input
-                        type="text"
-                        placeholder="Search by specialty"
-                        value={filterSpecialtySearch}
-                        onChange={(e) => {
-                          setFilterSpecialtySearch(e.target.value)
-                          setShowSpecialtyDropdown(true)
-                        }}
-                        onFocus={() => setShowSpecialtyDropdown(true)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="input-sm"
-                      />
-                      {showSpecialtyDropdown && getFilteredSpecialties().length > 0 && (
-                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
-                          {getFilteredSpecialties().map((specialty) => (
-                            <div
-                              key={specialty}
-                              className="dropdown-item"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setFilterSpecialty(specialty)
-                                setFilterSpecialtySearch(specialty)
-                                setShowSpecialtyDropdown(false)
-                              }}
-                            >
-                              {specialty}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {filterSpecialty && (
-                        <button
-                          className="clear-filter-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setFilterSpecialty('')
-                            setFilterSpecialtySearch('')
-                          }}
-                          type="button"
-                          aria-label="Clear specialty filter"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {locationPermission === 'denied' && (
-                  <div className="location-warning">
-                    <p>📍 Location permission denied. Clinics will not be sorted by distance.</p>
-                    <button onClick={requestLocationPermission} className="btn btn-secondary btn-sm">
-                      Request Location Again
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Clinic Selection */}
-              <div className="section-card">
-                <div className="section-header">
-                  <h2>Select Clinic</h2>
-                  {userLocation && (
-                    <span className="location-badge">📍 Sorted by distance</span>
-                  )}
-                </div>
-                {loading ? (
-                  <div className="loading">Loading clinics...</div>
-                ) : displayedClinics.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No clinics found matching your filters</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="clinics-grid">
-                      {displayedClinics.map((clinic) => (
-                        <div
-                          key={clinic.id}
-                          className="clinic-card"
-                          onClick={() => handleClinicClick(clinic)}
-                        >
-                          <div className="clinic-header">
-                            <h3>{clinic.name}</h3>
-                          </div>
-                          <div className="clinic-details">
-                            <p><strong>Clinic ID:</strong> {clinic.id}</p>
-                            <p><strong>Address:</strong> {clinic.address}</p>
-                            {clinic.region && <p><strong>Region:</strong> {clinic.region}</p>}
-                            {clinic.specialty && <p><strong>Specialty:</strong> {clinic.specialty}</p>}
-                            {clinic.telephoneNo && <p><strong>Phone:</strong> {clinic.telephoneNo}</p>}
-                            {clinic.distance !== null && clinic.distance !== undefined && (
-                              <p className="distance-info">
-                                <strong>Distance:</strong> {clinic.distance.toFixed(2)} km away
-                              </p>
-                            )}
-                            {formatOpeningHours(clinic) && (
-                              <div className="opening-hours">
-                                <p><strong>Opening Hours:</strong></p>
-                                <div className="opening-hours-list">
-                                  {formatOpeningHours(clinic).map((schedule, index) => (
-                                    <div key={index} className="opening-hours-item">
-                                      <span className="opening-hours-day">{schedule.day}:</span>
-                                      <span className="opening-hours-time">{schedule.times}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
                         </div>
                       ))}
                     </div>
-                    
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                      <div className="pagination">
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                        >
-                          Previous
-                        </button>
-                        <span className="pagination-info">
-                          Page {currentPage} of {totalPages}
-                        </span>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                        >
-                          Next
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
