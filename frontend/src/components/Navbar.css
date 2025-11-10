@@ -5,8 +5,8 @@
   position: sticky;
   top: 0;
   z-index: 1000;
-  box-shadow: 0 2px 20px rgba(139, 21, 56, 0.08);
-  border-bottom: 1px solid rgba(139, 21, 56, 0.1);
+  box-shadow: 0 2px 20px rgba(78, 205, 196, 0.08);
+  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
 }
 
 .navbar-container {
@@ -42,7 +42,7 @@
 }
 
 .brand-text {
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.3px;
@@ -61,7 +61,7 @@
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(139, 21, 56, 0.15);
+  border: 1px solid rgba(78, 205, 196, 0.15);
   border-radius: 50px;
   padding: 0.625rem 1.25rem;
   display: flex;
@@ -71,7 +71,7 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.9rem;
   font-weight: 500;
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   position: relative;
   overflow: hidden;
 }
@@ -83,7 +83,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(139, 21, 56, 0.1) 0%, rgba(200, 42, 79, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.1) 0%, rgba(126, 227, 220, 0.05) 100%);
   opacity: 0;
   transition: opacity 0.3s ease;
   border-radius: 50px;
@@ -91,9 +91,9 @@
 
 .navbar-menu-item:hover {
   background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(139, 21, 56, 0.3);
+  border-color: rgba(78, 205, 196, 0.3);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(139, 21, 56, 0.15);
+  box-shadow: 0 8px 24px rgba(78, 205, 196, 0.15);
 }
 
 .navbar-menu-item:hover::before {
@@ -101,16 +101,16 @@
 }
 
 .navbar-menu-item.active {
-  background: rgba(139, 21, 56, 0.15);
-  border-color: rgba(139, 21, 56, 0.4);
-  color: var(--maroon-dark);
+  background: rgba(78, 205, 196, 0.15);
+  border-color: rgba(78, 205, 196, 0.4);
+  color: var(--teal-dark);
   font-weight: 600;
-  box-shadow: 0 4px 16px rgba(139, 21, 56, 0.2);
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.2);
 }
 
 .navbar-menu-item.active::before {
   opacity: 1;
-  background: linear-gradient(135deg, rgba(139, 21, 56, 0.2) 0%, rgba(200, 42, 79, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.2) 0%, rgba(126, 227, 220, 0.1) 100%);
 }
 
 .navbar-menu-icon {
@@ -125,7 +125,7 @@
 
 .navbar-menu-item.active .navbar-menu-icon {
   transform: scale(1.1);
-  filter: drop-shadow(0 2px 4px rgba(139, 21, 56, 0.3));
+  filter: drop-shadow(0 2px 4px rgba(78, 205, 196, 0.3));
 }
 
 .navbar-menu-label {
@@ -145,7 +145,7 @@
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(139, 21, 56, 0.15);
+  border: 1px solid rgba(78, 205, 196, 0.15);
   border-radius: 50px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -153,9 +153,9 @@
 
 .navbar-user:hover {
   background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(139, 21, 56, 0.3);
+  border-color: rgba(78, 205, 196, 0.3);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(139, 21, 56, 0.15);
+  box-shadow: 0 8px 24px rgba(78, 205, 196, 0.15);
 }
 
 .user-avatar {
@@ -169,7 +169,7 @@
   color: #ffffff;
   font-weight: 700;
   font-size: 1.15rem;
-  box-shadow: 0 4px 16px rgba(139, 21, 56, 0.2);
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.2);
   border: 2px solid rgba(255, 255, 255, 0.8);
   flex-shrink: 0;
 }
@@ -182,7 +182,7 @@
 }
 
 .user-name {
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   font-weight: 600;
   font-size: 0.95rem;
   white-space: nowrap;
@@ -200,7 +200,7 @@
 
 .role-admin {
   background: linear-gradient(135deg, #ffd700 0%, #ffb300 100%);
-  color: #8b1538;
+  color: #4ecdc4;
   box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
 }
 
@@ -222,7 +222,7 @@
 }
 
 .dropdown-icon {
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   transition: transform 0.3s;
   flex-shrink: 0;
 }
@@ -242,7 +242,7 @@
   right: 0;
   background: #ffffff;
   border-radius: 20px;
-  box-shadow: 0 12px 48px rgba(139, 21, 56, 0.2), 0 0 0 1px rgba(139, 21, 56, 0.08);
+  box-shadow: 0 12px 48px rgba(78, 205, 196, 0.2), 0 0 0 1px rgba(78, 205, 196, 0.08);
   min-width: 280px;
   overflow: hidden;
   z-index: 1001;
@@ -264,7 +264,7 @@
 .dropdown-header {
   padding: 1.25rem 1.5rem;
   background: var(--gradient-glow);
-  border-bottom: 1px solid rgba(139, 21, 56, 0.1);
+  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
 }
 
 .dropdown-label {
@@ -278,14 +278,14 @@
 
 .dropdown-email {
   font-size: 0.9rem;
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   font-weight: 600;
   word-break: break-all;
 }
 
 .dropdown-divider {
   height: 1px;
-  background: linear-gradient(to right, transparent, rgba(139, 21, 56, 0.1), transparent);
+  background: linear-gradient(to right, transparent, rgba(78, 205, 196, 0.1), transparent);
   margin: 0.5rem 0;
 }
 
@@ -297,7 +297,7 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
@@ -306,17 +306,17 @@
 }
 
 .dropdown-item svg {
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   flex-shrink: 0;
 }
 
 .dropdown-item:hover {
   background: var(--gradient-glow);
-  color: var(--maroon-dark);
+  color: var(--teal-dark);
 }
 
 .dropdown-item:hover svg {
-  color: var(--maroon-dark);
+  color: var(--teal-dark);
 }
 
 /* Responsive */

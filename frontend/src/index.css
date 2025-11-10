@@ -14,18 +14,18 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  /* Maroon color palette */
-  --maroon-primary: #8b1538;
-  --maroon-dark: #6b0f2a;
-  --maroon-light: #a8284f;
-  --maroon-accent: #c92a4f;
-  --maroon-glow: rgba(139, 21, 56, 0.3);
+  /* Soft Teal color palette */
+  --teal-primary: #4ecdc4;
+  --teal-dark: #3a9d96;
+  --teal-light: #6dd3cc;
+  --teal-accent: #7ee3dc;
+  --teal-glow: rgba(78, 205, 196, 0.4);
   
-  /* Gradient backgrounds */
-  --gradient-primary: linear-gradient(135deg, #8b1538 0%, #a8284f 50%, #c92a4f 100%);
-  --gradient-soft: linear-gradient(135deg, #f8f9fa 0%, #fff5f7 100%);
-  --gradient-card: linear-gradient(135deg, #ffffff 0%, #fff5f7 100%);
-  --gradient-glow: linear-gradient(135deg, rgba(139, 21, 56, 0.1) 0%, rgba(200, 42, 79, 0.05) 100%);
+  /* Enhanced Gradient backgrounds - subtle and sophisticated */
+  --gradient-primary: linear-gradient(135deg, #4ecdc4 0%, #5fb3b3 30%, #6dd3cc 60%, #7ee3dc 100%);
+  --gradient-soft: linear-gradient(135deg, #ffffff 0%, #fafdfc 20%, #f5fbfa 40%, #f0f9f8 50%, #f5fbfa 60%, #fafdfc 80%, #ffffff 100%);
+  --gradient-card: linear-gradient(135deg, #ffffff 0%, #fefefe 50%, #ffffff 100%);
+  --gradient-glow: linear-gradient(135deg, rgba(78, 205, 196, 0.08) 0%, rgba(126, 227, 220, 0.05) 50%, rgba(78, 205, 196, 0.06) 100%);
 }
 
 * {
@@ -38,24 +38,29 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8f9fa 0%, #fff5f7 25%, #ffeef2 50%, #fff5f7 75%, #f8f9fa 100%);
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(78, 205, 196, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(126, 227, 220, 0.06) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(78, 205, 196, 0.04) 0%, transparent 60%),
+    linear-gradient(135deg, #ffffff 0%, #fafdfc 15%, #f5fbfa 25%, #f0f9f8 35%, #f5fbfa 45%, #fafdfc 55%, #ffffff 65%, #fafdfc 75%, #f5fbfa 85%, #fafdfc 95%, #ffffff 100%);
   background-attachment: fixed;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
   color: #2d2d2d;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
-  color: var(--maroon-dark);
+  color: var(--teal-dark);
 }
 
 a {
   font-weight: 500;
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   text-decoration: inherit;
 }
 
 a:hover {
-  color: var(--maroon-light);
+  color: var(--teal-light);
 }
 
 button {

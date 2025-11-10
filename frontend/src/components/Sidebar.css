@@ -1,12 +1,12 @@
 .sidebar {
   width: 280px;
   background: var(--gradient-card);
-  border-right: 1px solid rgba(139, 21, 56, 0.12);
+  border-right: 1px solid rgba(78, 205, 196, 0.12);
   min-height: calc(100vh - 76px);
   position: sticky;
   top: 76px;
   overflow-y: auto;
-  box-shadow: 2px 0 24px rgba(139, 21, 56, 0.04);
+  box-shadow: 2px 0 24px rgba(78, 205, 196, 0.04);
 }
 
 .sidebar-content {
@@ -50,7 +50,7 @@
 
 .sidebar-item:hover {
   background: var(--gradient-glow);
-  color: var(--maroon-primary);
+  color: var(--teal-primary);
   transform: translateX(4px);
 }
 
@@ -59,15 +59,15 @@
 }
 
 .sidebar-item.active {
-  background: linear-gradient(135deg, rgba(139, 21, 56, 0.1) 0%, rgba(200, 42, 79, 0.05) 100%);
-  color: var(--maroon-primary);
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.1) 0%, rgba(126, 227, 220, 0.05) 100%);
+  color: var(--teal-primary);
   font-weight: 600;
-  box-shadow: 0 2px 12px rgba(139, 21, 56, 0.08);
+  box-shadow: 0 2px 12px rgba(78, 205, 196, 0.08);
 }
 
 .sidebar-item.active::before {
   height: 70%;
-  box-shadow: 0 0 12px var(--maroon-glow);
+  box-shadow: 0 0 12px var(--teal-glow);
 }
 
 .sidebar-icon {
@@ -83,7 +83,7 @@
 }
 
 .sidebar-item.active .sidebar-icon {
-  filter: drop-shadow(0 2px 6px var(--maroon-glow));
+  filter: drop-shadow(0 2px 6px var(--teal-glow));
   transform: scale(1.15);
 }
 
@@ -104,7 +104,7 @@
     top: 76px;
     z-index: 90;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 4px 0 24px rgba(139, 21, 56, 0.15);
+    box-shadow: 4px 0 24px rgba(78, 205, 196, 0.15);
     border-radius: 0 24px 24px 0;
   }
 
