@@ -96,9 +96,10 @@ public interface QueueRepository extends JpaRepository<QueueLog, Long> {
     boolean existsByClinicIdAndStatus(Long clinicId, String status);
 
     /**
-     * Find the first (currently being served) queue entry for a clinic
+     * Find the currently serving (CALLED status) queue entry for a clinic
+     * Returns the patient with status = 'CALLED' (being served by doctor)
      */
-    @Query(value = "SELECT * FROM queue_log WHERE clinic_id = :clinicId AND status = 'IN_QUEUE' " +
-           "ORDER BY priority DESC, created_at ASC LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT * FROM queue_log WHERE clinic_id = :clinicId AND status = 'CALLED' " +
+           "LIMIT 1", nativeQuery = true)
     Optional<QueueLog> findCurrentlyServing(@Param("clinicId") Long clinicId);
 }

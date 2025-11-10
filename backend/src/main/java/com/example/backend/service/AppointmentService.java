@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.example.backend.dto.AppointmentUpdateDTO;
 import com.example.backend.exception.DoubleBookingException;
 import com.example.backend.model.Patient;
 import com.example.backend.model.Doctor;
@@ -139,27 +140,27 @@ public class AppointmentService {
     }
 
     // Update appointment
-    public Optional<Appointment> updateAppointment(Long appointmentId, Appointment updatedAppointment) {
+    public Optional<Appointment> updateAppointment(Long appointmentId, AppointmentUpdateDTO updateDTO) {
         return appointmentRepository.findById(appointmentId)
                 .map(existingAppointment -> {
-                    // Update fields
-                    if (updatedAppointment.getPatientId() != null) {
-                        existingAppointment.setPatientId(updatedAppointment.getPatientId());
+                    // Update fields from DTO (preserves appointmentId and createdAt)
+                    if (updateDTO.getPatientId() != null) {
+                        existingAppointment.setPatientId(updateDTO.getPatientId());
                     }
-                    if (updatedAppointment.getClinicId() != null) {
-                        existingAppointment.setClinicId(updatedAppointment.getClinicId());
+                    if (updateDTO.getClinicId() != null) {
+                        existingAppointment.setClinicId(updateDTO.getClinicId());
                     }
-                    if (updatedAppointment.getDoctorId() != null) {
-                        existingAppointment.setDoctorId(updatedAppointment.getDoctorId());
+                    if (updateDTO.getDoctorId() != null) {
+                        existingAppointment.setDoctorId(updateDTO.getDoctorId());
                     }
-                    if (updatedAppointment.getDateTime() != null) {
-                        existingAppointment.setDateTime(updatedAppointment.getDateTime());
+                    if (updateDTO.getDateTime() != null) {
+                        existingAppointment.setDateTime(updateDTO.getDateTime());
                     }
-                    if (updatedAppointment.getApptStatus() != null) {
-                        existingAppointment.setApptStatus(updatedAppointment.getApptStatus());
+                    if (updateDTO.getApptStatus() != null) {
+                        existingAppointment.setApptStatus(updateDTO.getApptStatus());
                     }
-                    if (updatedAppointment.getTreatmentSummary() != null) {
-                        existingAppointment.setTreatmentSummary(updatedAppointment.getTreatmentSummary());
+                    if (updateDTO.getTreatmentSummary() != null) {
+                        existingAppointment.setTreatmentSummary(updateDTO.getTreatmentSummary());
                     }
 
                     return appointmentRepository.save(existingAppointment);

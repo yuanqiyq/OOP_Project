@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.backend.dto.AppointmentUpdateDTO;
 import com.example.backend.dto.ErrorResponse;
 import com.example.backend.exception.DoubleBookingException;
 import com.example.backend.model.appointments.Appointment;
@@ -97,9 +98,9 @@ public class AppointmentController {
     // PUT /api/appointments/{id} - Update appointment
     @PutMapping("/{id}")
     public ResponseEntity<Appointment> updateAppointment(@PathVariable Long id,
-            @RequestBody Appointment appointment) {
+            @RequestBody AppointmentUpdateDTO updateDTO) {
         try {
-            return appointmentService.updateAppointment(id, appointment)
+            return appointmentService.updateAppointment(id, updateDTO)
                     .map(updatedAppointment -> ResponseEntity.ok(updatedAppointment))
                     .orElse(ResponseEntity.notFound().build());
         } catch (Exception e) {

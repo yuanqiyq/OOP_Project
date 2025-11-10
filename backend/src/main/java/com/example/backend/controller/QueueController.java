@@ -329,6 +329,60 @@ public class QueueController {
     }
 
     /**
+     * Call next patient in queue - staff-controlled queue progression
+     *
+     * Atomic operation:
+     * 1. Marks current "being served" patient (CALLED) as DONE
+     * 2. Calls next waiting patient (position 1) as CALLED
+     * 3. Sends "your turn" notification to newly called patient
+     *
+     * @param clinicId ID of the clinic
+     * @return ResponseEntity with called patient details or error
+     *
+     * POST /api/queue/clinic/{clinicId}/call-next
+     */
+    @PostMapping("/clinic/{clinicId}/call-next")
+    public ResponseEntity<?> callNextQueueNumber(@PathVariable Long clinicId) {
+        try {
+            QueueLog calledPatient = queueService.callNextQueueNumber(clinicId);
+            return ResponseEntity.ok(calledPatient);
+
+        } catch (QueueException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Queue Error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse(500, "Internal Server Error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Call specific patient by appointment ID - staff manually selects patient
+     *
+     * Changes target patient status from IN_QUEUE to CALLED and sends "your turn" notification.
+     * Used when staff needs to call someone out of order.
+     *
+     * @param appointmentId ID of the appointment to call
+     * @return ResponseEntity with called patient details or error
+     *
+     * POST /api/queue/call-appointment/{appointmentId}
+     */
+    @PostMapping("/call-appointment/{appointmentId}")
+    public ResponseEntity<?> callByAppointmentId(@PathVariable Long appointmentId) {
+        try {
+            QueueLog calledPatient = queueService.callByAppointmentId(appointmentId);
+            return ResponseEntity.ok(calledPatient);
+
+        } catch (QueueException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Queue Error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse(500, "Internal Server Error", e.getMessage()));
+        }
+    }
+
+    /**
      * Health check endpoint for queue service
      *
      * @return ResponseEntity with status message

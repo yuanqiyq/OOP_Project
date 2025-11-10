@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
  * Key Features:
  * - Tracks patient position in clinic queue
  * - Priority-based queue ordering (Emergency > Elderly > Normal)
- * - Status tracking (IN_QUEUE, DONE, MISSED)
+ * - Status tracking (IN_QUEUE, CALLED, DONE, MISSED)
  * - Audit trail for queue operations
  *
  * Dependencies:
@@ -39,6 +39,7 @@ public class QueueLog {
 
     // Status constants
     public static final String STATUS_IN_QUEUE = "IN_QUEUE";
+    public static final String STATUS_CALLED = "CALLED";
     public static final String STATUS_DONE = "DONE";
     public static final String STATUS_MISSED = "MISSED";
 
@@ -99,6 +100,7 @@ public class QueueLog {
      */
     public static boolean isValidStatus(String status) {
         return STATUS_IN_QUEUE.equals(status) ||
+               STATUS_CALLED.equals(status) ||
                STATUS_DONE.equals(status) ||
                STATUS_MISSED.equals(status);
     }
@@ -116,8 +118,12 @@ public class QueueLog {
      * Check if status transition is valid
      */
     public static boolean isValidTransition(String currentStatus, String newStatus) {
-        // Can only transition from IN_QUEUE to DONE or MISSED
+        // IN_QUEUE → CALLED (staff calls patient) or IN_QUEUE → MISSED (no-show before calling)
         if (STATUS_IN_QUEUE.equals(currentStatus)) {
+            return STATUS_CALLED.equals(newStatus) || STATUS_MISSED.equals(newStatus);
+        }
+        // CALLED → DONE (appointment completed) or CALLED → MISSED (no-show after calling)
+        if (STATUS_CALLED.equals(currentStatus)) {
             return STATUS_DONE.equals(newStatus) || STATUS_MISSED.equals(newStatus);
         }
         // No transitions allowed from DONE or MISSED

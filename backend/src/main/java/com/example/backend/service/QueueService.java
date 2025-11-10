@@ -180,10 +180,14 @@ public class QueueService {
 
     /**
      * Update the status of a queue entry
-     * Valid transitions: IN_QUEUE → DONE or MISSED
+     * Valid transitions:
+     * - IN_QUEUE → CALLED (staff explicitly calls patient)
+     * - IN_QUEUE → MISSED (patient no-show before calling)
+     * - CALLED → DONE (appointment completed)
+     * - CALLED → MISSED (patient no-show after calling)
      *
      * @param queueId   ID of the queue entry
-     * @param newStatus New status (DONE or MISSED)
+     * @param newStatus New status
      * @return Updated QueueLog entry
      * @throws QueueException if queue entry not found or invalid transition
      */
@@ -192,7 +196,7 @@ public class QueueService {
         // Validate new status
         if (!QueueLog.isValidStatus(newStatus)) {
             throw new QueueException("Invalid status: " + newStatus +
-                    ". Valid statuses are: IN_QUEUE, DONE, MISSED");
+                    ". Valid statuses are: IN_QUEUE, CALLED, DONE, MISSED");
         }
 
         // Find queue entry
@@ -224,24 +228,16 @@ public class QueueService {
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
 
-        // If status changed to DONE, send "your turn" notification
+        // Log status change
         if (QueueLog.STATUS_DONE.equals(newStatus)) {
-            log.info("Status changed to DONE for queue entry {}, sending 'your turn' notification",
-                    queueEntry.getQueueId());
-            sendYourTurnNotification(queueEntry, queuePosition);
+            log.info("Status changed to DONE for queue entry {}", queueEntry.getQueueId());
+        } else if (QueueLog.STATUS_CALLED.equals(newStatus)) {
+            log.info("Status changed to CALLED for queue entry {}", queueEntry.getQueueId());
+        } else if (QueueLog.STATUS_MISSED.equals(newStatus)) {
+            log.info("Status changed to MISSED for queue entry {}", queueEntry.getQueueId());
         }
 
-        // If status changed to MISSED, the next person in queue (now position 1) should
-        // get "your turn" notification
-        if (QueueLog.STATUS_MISSED.equals(newStatus)) {
-            log.info(
-                    "Status changed to MISSED for queue entry {}, checking if next patient should get 'your turn' notification",
-                    queueEntry.getClinicId());
-        }
-
-        // Check and send queue position notifications (position 1 and position 3)
-        // This will send "your turn" to the new position 1 if someone was marked as
-        // MISSED or DONE
+        // Check and send queue position notifications (only "three away" for position 3)
         checkAndSendQueueNotifications(queueEntry.getClinicId());
 
         return saved;
@@ -292,6 +288,112 @@ public class QueueService {
         checkAndSendQueueNotifications(appointment.getClinicId());
 
         return saved;
+    }
+
+    /**
+     * Call next patient in queue - staff-controlled queue progression
+     *
+     * Atomic operation:
+     * 1. Mark current "being served" patient (CALLED) as DONE
+     * 2. Call next waiting patient (position 1 IN_QUEUE) as CALLED
+     * 3. Send "your turn" notification to newly called patient
+     *
+     * @param clinicId ID of the clinic
+     * @return The newly called patient's QueueLog entry
+     * @throws QueueException if no patients waiting in queue
+     */
+    @Transactional
+    public QueueLog callNextQueueNumber(Long clinicId) {
+        // Step 1: Mark current "being served" patient as DONE (if exists)
+        Optional<QueueLog> currentlyServing = queueRepository.findByClinicIdAndStatus(
+                clinicId,
+                QueueLog.STATUS_CALLED).stream().findFirst();
+
+        if (currentlyServing.isPresent()) {
+            QueueLog current = currentlyServing.get();
+            current.setStatus(QueueLog.STATUS_DONE);
+            queueRepository.save(current);
+            log.info("Marked currently serving patient (queue {}) as DONE", current.getQueueId());
+        }
+
+        // Step 2: Get next waiting patient (position 1 from IN_QUEUE)
+        List<QueueLog> waitingQueue = queueRepository
+                .findByClinicIdAndStatusOrderByPriorityDescCreatedAtAsc(
+                        clinicId,
+                        QueueLog.STATUS_IN_QUEUE);
+
+        if (waitingQueue.isEmpty()) {
+            throw new QueueException("No patients waiting in queue for clinic: " + clinicId);
+        }
+
+        QueueLog nextPatient = waitingQueue.get(0); // Position 1
+
+        // Step 3: Mark next patient as CALLED (being served)
+        nextPatient.setStatus(QueueLog.STATUS_CALLED);
+        QueueLog called = queueRepository.save(nextPatient);
+
+        // Step 4: Send "your turn" notification
+        sendYourTurnNotification(called, 1); // Position 1
+
+        // Step 5: Publish event for SSE updates
+        eventPublisher.publishEvent(new QueueChangedEvent(clinicId));
+
+        // Step 6: Check if new position 3 needs "three away" notification
+        checkAndSendQueueNotifications(clinicId);
+
+        log.info("Called next patient (queue {}, appointment {}) for clinic {}",
+                called.getQueueId(), called.getAppointmentId(), clinicId);
+
+        return called;
+    }
+
+    /**
+     * Call specific patient by appointment ID - staff manually selects patient
+     *
+     * Changes target patient status from IN_QUEUE to CALLED and sends "your turn" notification.
+     * Used when staff needs to call someone out of order.
+     *
+     * @param appointmentId ID of the appointment to call
+     * @return The called patient's QueueLog entry
+     * @throws QueueException if appointment not in queue
+     */
+    @Transactional
+    public QueueLog callByAppointmentId(Long appointmentId) {
+        // Step 1: Find patient's queue entry (must be IN_QUEUE)
+        Optional<QueueLog> queueEntry = queueRepository.findByAppointmentIdAndStatus(
+                appointmentId,
+                QueueLog.STATUS_IN_QUEUE);
+
+        if (queueEntry.isEmpty()) {
+            throw new QueueException("Appointment " + appointmentId + " is not in queue");
+        }
+
+        QueueLog patient = queueEntry.get();
+
+        // Step 2: Get current position (for logging/notification context)
+        List<QueueLog> queue = queueRepository
+                .findByClinicIdAndStatusOrderByPriorityDescCreatedAtAsc(
+                        patient.getClinicId(),
+                        QueueLog.STATUS_IN_QUEUE);
+        int position = queue.indexOf(patient) + 1;
+
+        // Step 3: Mark patient as CALLED (being served)
+        patient.setStatus(QueueLog.STATUS_CALLED);
+        QueueLog called = queueRepository.save(patient);
+
+        // Step 4: Send "your turn" notification
+        sendYourTurnNotification(called, position);
+
+        // Step 5: Publish event for SSE updates
+        eventPublisher.publishEvent(new QueueChangedEvent(patient.getClinicId()));
+
+        // Step 6: Check if queue positions changed (new position 3)
+        checkAndSendQueueNotifications(patient.getClinicId());
+
+        log.info("Called patient by appointment ID {} (queue {}, was position {})",
+                appointmentId, called.getQueueId(), position);
+
+        return called;
     }
 
     /**
@@ -529,9 +631,11 @@ public class QueueService {
     }
 
     /**
-     * Checks all patients in queue and sends notifications:
-     * - "your turn" notification to patients at position 1
-     * - "three away" notification to patients at position 3
+     * Checks queue and sends automatic notifications:
+     * - "three away" notification to patients at position 3 (automatic)
+     *
+     * Note: "your turn" notifications are sent only via explicit staff calls
+     * (callNextQueueNumber() or callByAppointmentId()), not automatically
      */
     private void checkAndSendQueueNotifications(Long clinicId) {
         try {
@@ -542,14 +646,8 @@ public class QueueService {
                 int position = i + 1;
                 QueueLog queueEntry = queueEntries.get(i);
 
-                // Send "your turn" notification to patient at position 1
-                if (position == 1) {
-                    log.info("Patient at position 1 found (appointment {}), sending 'your turn' notification",
-                            queueEntry.getAppointmentId());
-                    sendYourTurnNotification(queueEntry, position);
-                }
                 // Send "three away" notification to patient at position 3
-                else if (position == 3) {
+                if (position == 3) {
                     log.debug("Patient at position 3 found (appointment {}), sending 'three away' notification",
                             queueEntry.getAppointmentId());
                     sendThreeAwayNotification(queueEntry, position);
