@@ -1,23 +1,18 @@
 /* Admin View - Light Mode with Maroon Accents */
 .admin-view {
   min-height: 100vh;
-  background: var(--gradient-soft);
   color: #2d2d2d;
 }
 
 .admin-layout {
-  display: flex;
   min-height: calc(100vh - 80px);
 }
 
 .admin-main {
-  flex: 1;
   padding: 2rem;
   overflow-x: hidden;
-  background: var(--gradient-soft);
   max-width: 1600px;
   margin: 0 auto;
-  width: 100%;
 }
 
 /* Alerts */

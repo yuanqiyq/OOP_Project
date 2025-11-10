@@ -1,6 +1,5 @@
 .app {
   min-height: 100vh;
-  background: var(--gradient-soft);
 }
 
 #root {

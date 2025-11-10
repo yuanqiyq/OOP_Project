@@ -38,7 +38,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: var(--gradient-soft);
+  background: linear-gradient(135deg, #f8f9fa 0%, #fff5f7 25%, #ffeef2 50%, #fff5f7 75%, #f8f9fa 100%);
+  background-attachment: fixed;
   color: #2d2d2d;
 }
 

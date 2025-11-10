@@ -1,5 +1,5 @@
-// Use environment variable or fallback to relative path for production
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// Use environment variable or fallback to localhost for development
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
 
 // Helper function to make API calls
 async function apiCall(endpoint, options = {}) {
@@ -29,7 +29,9 @@ async function apiCall(endpoint, options = {}) {
     
     if (!response.ok) {
       const errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`
-      throw new Error(errorMessage)
+      const error = new Error(errorMessage)
+      error.status = response.status
+      throw error
     }
     
     return data

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { queueAPI, appointmentAPI, clinicAPI, adminAPI, doctorAPI } from '../lib/api'
 import Navbar from '../components/Navbar'
-import Sidebar from '../components/Sidebar'
 import { useLocation } from 'react-router-dom'
 import './StaffView.css'
 
@@ -334,7 +333,6 @@ export default function StaffView() {
     <div className="staff-view">
       <Navbar />
       <div className="staff-layout">
-        <Sidebar />
         <div className="staff-main">
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}

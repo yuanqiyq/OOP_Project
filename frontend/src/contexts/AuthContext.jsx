@@ -71,6 +71,8 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = async (authUuid, email = null) => {
     try {
+      setLoading(true)
+      
       // Get email if not provided
       let userEmail = email
       if (!userEmail) {
@@ -83,28 +85,106 @@ export const AuthProvider = ({ children }) => {
         try {
           const staff = await adminAPI.getStaffByEmail(userEmail)
           if (staff) {
-            setUserProfile(staff)
+            // Staff extends User, so all User fields (fname, lname, email, userId, authUuid, role) are directly on staff
+            // Also include staff-specific fields
+            const profile = {
+              userId: staff.userId || staff.staffId,
+              staffId: staff.staffId,
+              clinicId: staff.clinic?.id || staff.clinicId,
+              authUuid: staff.authUuid,
+              email: staff.email,
+              fname: staff.fname,
+              lname: staff.lname,
+              role: staff.role || 'STAFF'
+            }
+            setUserProfile(profile)
             setLoading(false)
             return
           }
         } catch (staffError) {
-          // Staff not found, continue to check User table
-          console.log('Staff not found, checking User table:', staffError)
+          // Check if it's a 404 (not found) - that's expected, continue searching
+          if (staffError.status === 404 || staffError.message?.includes('404') || staffError.message?.includes('Not Found')) {
+            // Staff not found, continue to check Patient table
+            console.log('Staff not found, checking Patient table')
+          } else {
+            console.error('Error fetching staff:', staffError)
+          }
         }
       }
       
-      // If not staff, try to get user from User table (for patients)
-      const users = await userAPI.getAll()
-      const profile = users.find(u => u.authUuid === authUuid)
-      
-      if (profile) {
-        setUserProfile(profile)
-      } else {
-        // If user doesn't exist in backend yet, create a basic profile
-        setUserProfile({ role: 'PATIENT', authUuid })
+      // If not staff, try to get patient by email (patients are in a separate table)
+      if (userEmail) {
+        try {
+          const patient = await adminAPI.getPatientByEmail(userEmail)
+          if (patient) {
+            // Patient extends User, so all User fields (fname, lname, email, userId, authUuid, role) are directly on patient
+            // Also include patient-specific fields
+            const profile = {
+              userId: patient.userId || patient.patientId,
+              patientId: patient.patientId,
+              authUuid: patient.authUuid,
+              email: patient.email,
+              fname: patient.fname,
+              lname: patient.lname,
+              role: patient.role || 'PATIENT',
+              patientIc: patient.patientIc,
+              dateOfBirth: patient.dateOfBirth,
+              gender: patient.gender
+            }
+            setUserProfile(profile)
+            setLoading(false)
+            return
+          }
+        } catch (patientError) {
+          // Check if it's a 404 (not found) - that's expected, continue searching
+          if (patientError.status === 404 || patientError.message?.includes('404') || patientError.message?.includes('Not Found')) {
+            // Patient not found by email, try User table
+            console.log('Patient not found by email, checking User table')
+          } else {
+            console.error('Error fetching patient:', patientError)
+          }
+        }
       }
+      
+      // Fallback: try to get user from User table by authUuid
+      try {
+        const users = await userAPI.getAll()
+        const profile = users.find(u => u.authUuid === authUuid)
+        
+        if (profile) {
+          setUserProfile(profile)
+          setLoading(false)
+          return
+        }
+      } catch (userError) {
+        console.error('Error fetching from User table:', userError)
+      }
+      
+      // If user doesn't exist in any table, this is an error condition
+      // Don't create a generic profile - throw an error instead
+      console.error('User profile not found in any table for:', { authUuid, email: userEmail })
+      throw new Error('User profile not found. Please contact support.')
     } catch (error) {
       console.error('Error fetching user profile:', error)
+      // Only set a minimal profile if it's a network/API error, not a "not found" error
+      if (error.message?.includes('not found') || error.message?.includes('Not Found') || error.message?.includes('User profile not found')) {
+        // User doesn't exist - this shouldn't happen for valid sign-ins
+        // Sign out the user since they don't have a valid profile
+        await supabase.auth.signOut()
+        setUserProfile(null)
+        setUser(null)
+      } else {
+        // For other errors (network issues, etc.), set a basic profile with at least email
+        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        setUserProfile({ 
+          role: 'PATIENT', 
+          authUuid,
+          email: currentUser?.email || email || '',
+          fname: '',
+          lname: '',
+          userId: null
+        })
+      }
     } finally {
       setLoading(false)
     }

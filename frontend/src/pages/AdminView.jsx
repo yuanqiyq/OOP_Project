@@ -4,7 +4,6 @@ import { adminAPI, userAPI, clinicAPI, doctorAPI, reportAPI } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
-import Sidebar from '../components/Sidebar'
 import Toast from '../components/Toast'
 import './AdminView.css'
 
@@ -513,7 +512,6 @@ export default function AdminView() {
         />
       )}
       <div className="admin-layout">
-        <Sidebar />
         <div className="admin-main">
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
