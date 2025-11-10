@@ -27,6 +27,9 @@ export default function PatientView() {
   
   // Reschedule state
   const [appointmentToReschedule, setAppointmentToReschedule] = useState(null)
+  
+  // Cancel state
+  const [appointmentToCancel, setAppointmentToCancel] = useState(null)
 
   // Booking state
   const [clinics, setClinics] = useState([])
@@ -211,9 +214,15 @@ export default function PatientView() {
     let filtered = appointments
 
     if (appointmentFilter === 'upcoming') {
-      filtered = appointments.filter(apt => new Date(apt.dateTime) > now)
+      // Show upcoming appointments that are not cancelled
+      filtered = appointments.filter(apt => 
+        new Date(apt.dateTime) > now && apt.apptStatus !== 'CANCELLED'
+      )
     } else if (appointmentFilter === 'past') {
-      filtered = appointments.filter(apt => new Date(apt.dateTime) <= now)
+      // Show past appointments that are not cancelled
+      filtered = appointments.filter(apt => 
+        new Date(apt.dateTime) <= now && apt.apptStatus !== 'CANCELLED'
+      )
       
       // Apply date filter if set
       if (pastAppointmentDateFilter) {
@@ -227,6 +236,9 @@ export default function PatientView() {
           return aptDate >= filterDate && aptDate < nextDay
         })
       }
+    } else if (appointmentFilter === 'archive') {
+      // Show only cancelled appointments
+      filtered = appointments.filter(apt => apt.apptStatus === 'CANCELLED')
     }
 
     return filtered
@@ -310,6 +322,40 @@ export default function PatientView() {
       await fetchAppointments()
     } catch (err) {
       showToast(err.message || 'Failed to reschedule appointment', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle cancel button click - show confirmation
+  const handleCancelClick = (appointment) => {
+    setAppointmentToCancel(appointment)
+  }
+
+  // Handle cancel confirmation - update appointment status to cancelled
+  const handleConfirmCancel = async () => {
+    if (!appointmentToCancel) return
+
+    try {
+      setLoading(true)
+
+      await appointmentAPI.update(appointmentToCancel.appointmentId, {
+        patientId: appointmentToCancel.patientId,
+        clinicId: appointmentToCancel.clinicId,
+        doctorId: appointmentToCancel.doctorId,
+        dateTime: appointmentToCancel.dateTime,
+        apptStatus: 'CANCELLED'
+      })
+
+      showToast('Appointment cancelled successfully!')
+      
+      // Reset state
+      setAppointmentToCancel(null)
+      
+      // Refresh appointments list
+      await fetchAppointments()
+    } catch (err) {
+      showToast(err.message || 'Failed to cancel appointment', 'error')
     } finally {
       setLoading(false)
     }
@@ -1114,9 +1160,21 @@ export default function PatientView() {
                       </button>
                       <button
                         className={`filter-btn ${appointmentFilter === 'past' ? 'active' : ''}`}
-                        onClick={() => setAppointmentFilter('past')}
+                        onClick={() => {
+                          setAppointmentFilter('past')
+                          setPastAppointmentDateFilter('')
+                        }}
                       >
                         Past Appointments
+                      </button>
+                      <button
+                        className={`filter-btn ${appointmentFilter === 'archive' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAppointmentFilter('archive')
+                          setPastAppointmentDateFilter('')
+                        }}
+                      >
+                        Archive
                       </button>
                     </div>
                   </div>
@@ -1140,7 +1198,11 @@ export default function PatientView() {
                   <div className="loading">Loading...</div>
                 ) : getFilteredAppointments().length === 0 ? (
                   <div className="empty-state">
-                    <p>No {appointmentFilter} appointments found</p>
+                    <p>
+                      {appointmentFilter === 'archive' 
+                        ? 'No cancelled appointments found' 
+                        : `No ${appointmentFilter} appointments found`}
+                    </p>
                   </div>
                 ) : (
                   <div className="appointments-list">
@@ -1181,16 +1243,32 @@ export default function PatientView() {
                             </div>
                           </div>
                           <div className="appointment-actions-vertical">
-                            <button
-                              onClick={() => handleRescheduleClick(apt)}
-                              className="btn btn-primary reschedule-btn"
-                              disabled={loading || within24Hours || appointmentFilter === 'past'}
-                            >
-                              Reschedule
-                            </button>
-                            {within24Hours && (
+                            {apt.apptStatus !== 'CANCELLED' && (
+                              <>
+                                <button
+                                  onClick={() => handleRescheduleClick(apt)}
+                                  className="btn btn-primary reschedule-btn"
+                                  disabled={loading || within24Hours || appointmentFilter === 'past' || appointmentFilter === 'archive'}
+                                >
+                                  Reschedule
+                                </button>
+                                <button
+                                  onClick={() => handleCancelClick(apt)}
+                                  className="btn btn-warning reschedule-btn"
+                                  disabled={loading || within24Hours || appointmentFilter === 'past' || appointmentFilter === 'archive'}
+                                >
+                                  Cancel
+                                </button>
+                                {within24Hours && (
+                                  <p className="reschedule-disabled-message">
+                                    Cannot reschedule or cancel appointments within 24 hours
+                                  </p>
+                                )}
+                              </>
+                            )}
+                            {apt.apptStatus === 'CANCELLED' && (
                               <p className="reschedule-disabled-message">
-                                Cannot reschedule appointments within 24 hours
+                                This appointment has been cancelled
                               </p>
                             )}
                           </div>
@@ -1537,6 +1615,63 @@ export default function PatientView() {
                 )}
               </div>
             </>
+          )}
+
+          {/* Cancel Confirmation Modal */}
+          {appointmentToCancel && (
+            <div className="modal-overlay" onClick={() => setAppointmentToCancel(null)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h2>Cancel Appointment</h2>
+                  <button className="modal-close" onClick={() => setAppointmentToCancel(null)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <p>Are you sure you want to cancel this appointment?</p>
+                  <div className="booking-details">
+                    <div className="detail-item">
+                      <span className="detail-label">Appointment ID:</span>
+                      <span className="detail-value">#{appointmentToCancel.appointmentId}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Date & Time:</span>
+                      <span className="detail-value">
+                        {new Date(appointmentToCancel.dateTime).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Clinic:</span>
+                      <span className="detail-value">
+                        {clinicNames[appointmentToCancel.clinicId] || `Clinic #${appointmentToCancel.clinicId}`}
+                      </span>
+                    </div>
+                    {appointmentToCancel.doctorId && (
+                      <div className="detail-item">
+                        <span className="detail-label">Doctor:</span>
+                        <span className="detail-value">
+                          {doctorNames[appointmentToCancel.doctorId] || `Doctor #${appointmentToCancel.doctorId}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="modal-actions">
+                    <button
+                      onClick={handleConfirmCancel}
+                      className="btn btn-warning"
+                      disabled={loading}
+                    >
+                      {loading ? 'Cancelling...' : 'Confirm Cancel'}
+                    </button>
+                    <button
+                      onClick={() => setAppointmentToCancel(null)}
+                      className="btn btn-secondary"
+                      disabled={loading}
+                    >
+                      Keep Appointment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Booking Modal - Rendered outside view conditions so it can appear from any view */}
