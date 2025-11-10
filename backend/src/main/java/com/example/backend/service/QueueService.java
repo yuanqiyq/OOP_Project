@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -328,8 +329,9 @@ public class QueueService {
 
         QueueLog nextPatient = waitingQueue.get(0); // Position 1
 
-        // Step 3: Mark next patient as CALLED (being served)
+        // Step 3: Mark next patient as CALLED (being served) and set appointment start time
         nextPatient.setStatus(QueueLog.STATUS_CALLED);
+        nextPatient.setAppointmentStart(LocalDateTime.now()); // Record when patient is called in
         QueueLog called = queueRepository.save(nextPatient);
 
         // Step 4: Send "your turn" notification
@@ -377,8 +379,9 @@ public class QueueService {
                         QueueLog.STATUS_IN_QUEUE);
         int position = queue.indexOf(patient) + 1;
 
-        // Step 3: Mark patient as CALLED (being served)
+        // Step 3: Mark patient as CALLED (being served) and set appointment start time
         patient.setStatus(QueueLog.STATUS_CALLED);
+        patient.setAppointmentStart(LocalDateTime.now()); // Record when patient is called in
         QueueLog called = queueRepository.save(patient);
 
         // Step 4: Send "your turn" notification
