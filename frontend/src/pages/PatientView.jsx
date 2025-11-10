@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { appointmentAPI, queueAPI, adminAPI, clinicAPI, doctorAPI } from '../lib/api'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
+import Toast from '../components/Toast'
 import { useLocation } from 'react-router-dom'
 import './PatientView.css'
 
@@ -17,10 +18,24 @@ export default function PatientView() {
   const [success, setSuccess] = useState('')
   const [stats, setStats] = useState({ total: 0, upcoming: 0, completed: 0 })
   const [clinicId, setClinicId] = useState(null)
+  
+  // Toast state
+  const [toast, setToast] = useState(null)
+  
+  // Appointment filter state
+  const [appointmentFilter, setAppointmentFilter] = useState('upcoming') // 'upcoming' or 'past'
+  const [pastAppointmentDateFilter, setPastAppointmentDateFilter] = useState('')
+  
+  // Reschedule state
+  const [appointmentToReschedule, setAppointmentToReschedule] = useState(null)
 
   // Booking state
   const [clinics, setClinics] = useState([])
   const [doctors, setDoctors] = useState([])
+  
+  // Clinic and doctor name mappings
+  const [clinicNames, setClinicNames] = useState({})
+  const [doctorNames, setDoctorNames] = useState({})
   const [filteredClinics, setFilteredClinics] = useState([])
   const [displayedClinics, setDisplayedClinics] = useState([])
   const [selectedClinic, setSelectedClinic] = useState(null)
@@ -60,6 +75,27 @@ export default function PatientView() {
       fetchAppointments()
     }
   }, [userProfile])
+
+  // Update clinic and doctor name mappings when data is loaded
+  useEffect(() => {
+    if (clinics.length > 0) {
+      const namesMap = {}
+      clinics.forEach(clinic => {
+        namesMap[clinic.id] = clinic.name
+      })
+      setClinicNames(namesMap)
+    }
+  }, [clinics])
+
+  useEffect(() => {
+    if (doctors.length > 0) {
+      const namesMap = {}
+      doctors.forEach(doctor => {
+        namesMap[doctor.id] = `Dr. ${doctor.fname} ${doctor.lname}`
+      })
+      setDoctorNames(namesMap)
+    }
+  }, [doctors])
 
   useEffect(() => {
     // Use SSE for real-time queue position updates
@@ -123,7 +159,7 @@ export default function PatientView() {
       
       setError('')
     } catch (err) {
-      setError('Failed to load appointments')
+      showToast('Failed to load appointments', 'error')
       console.error(err)
     } finally {
       setLoading(false)
@@ -147,32 +183,125 @@ export default function PatientView() {
   }
 
 
-  const createTestAppointment = async () => {
+  // Show toast notification
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type })
+  }
+
+  // Check if appointment is within 24 hours
+  const isWithin24Hours = (appointmentDateTime) => {
+    const now = new Date()
+    const appointmentDate = new Date(appointmentDateTime)
+    const diffInMs = appointmentDate.getTime() - now.getTime()
+    const diffInHours = diffInMs / (1000 * 60 * 60)
+    return diffInHours <= 24 && diffInHours >= 0
+  }
+
+  // Filter appointments based on selected filter
+  const getFilteredAppointments = () => {
+    const now = new Date()
+    let filtered = appointments
+
+    if (appointmentFilter === 'upcoming') {
+      filtered = appointments.filter(apt => new Date(apt.dateTime) > now)
+    } else if (appointmentFilter === 'past') {
+      filtered = appointments.filter(apt => new Date(apt.dateTime) <= now)
+      
+      // Apply date filter if set
+      if (pastAppointmentDateFilter) {
+        const filterDate = new Date(pastAppointmentDateFilter)
+        filterDate.setHours(0, 0, 0, 0)
+        const nextDay = new Date(filterDate)
+        nextDay.setDate(nextDay.getDate() + 1)
+        
+        filtered = filtered.filter(apt => {
+          const aptDate = new Date(apt.dateTime)
+          return aptDate >= filterDate && aptDate < nextDay
+        })
+      }
+    }
+
+    return filtered
+  }
+
+  // Handle reschedule button click
+  const handleRescheduleClick = async (appointment) => {
     try {
       setLoading(true)
-      if (!clinicId) {
-        setError('Please select a clinic ID first')
-        return
+      
+      // Ensure clinics and doctors are loaded for the modal
+      if (clinics.length === 0) {
+        await fetchClinics()
+      }
+      if (doctors.length === 0) {
+        await fetchDoctors()
       }
       
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrow.setHours(10, 0, 0, 0)
+      // Fetch clinic and doctor details for the appointment
+      const clinic = await clinicAPI.getById(appointment.clinicId)
+      const doctor = appointment.doctorId ? await doctorAPI.getById(appointment.doctorId) : null
       
-      const newAppointment = await appointmentAPI.create({
-        patientId: userProfile.userId,
-        clinicId: clinicId,
-        doctorId: 1,
-        dateTime: tomorrow.toISOString(),
-        apptStatus: 'SCHEDULED'
-      })
+      setSelectedClinic(clinic)
+      if (doctor) {
+        setSelectedDoctor(doctor)
+      }
       
-      setSuccess('Test appointment created successfully!')
-      await fetchAppointments()
-      setTimeout(() => setSuccess(''), 3000)
+      // Set the appointment to reschedule
+      setAppointmentToReschedule(appointment)
+      
+      // Pre-populate date and time from existing appointment
+      const appointmentDate = new Date(appointment.dateTime)
+      setSelectedDate(appointmentDate.toISOString().split('T')[0])
+      
+      // Open booking modal
+      setShowBookingModal(true)
     } catch (err) {
-      setError(err.message || 'Failed to create appointment')
-      setTimeout(() => setError(''), 5000)
+      showToast(err.message || 'Failed to load appointment details', 'error')
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle reschedule (update appointment)
+  const handleRescheduleAppointment = async () => {
+    if (!appointmentToReschedule || !selectedClinic || !selectedDate || !selectedTimeSlot || !selectedDoctor) {
+      showToast('Please select clinic, date, time slot, and doctor', 'error')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const appointmentDateTime = new Date(selectedTimeSlot.datetime)
+      
+      // Format as local date-time string without timezone conversion
+      const year = appointmentDateTime.getFullYear()
+      const month = String(appointmentDateTime.getMonth() + 1).padStart(2, '0')
+      const day = String(appointmentDateTime.getDate()).padStart(2, '0')
+      const hours = String(appointmentDateTime.getHours()).padStart(2, '0')
+      const minutes = String(appointmentDateTime.getMinutes()).padStart(2, '0')
+      const seconds = String(appointmentDateTime.getSeconds()).padStart(2, '0')
+      const localDateTimeString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+      
+      await appointmentAPI.update(appointmentToReschedule.appointmentId, {
+        patientId: appointmentToReschedule.patientId,
+        clinicId: selectedClinic.id,
+        doctorId: selectedDoctor.id,
+        dateTime: localDateTimeString,
+        apptStatus: appointmentToReschedule.apptStatus || 'SCHEDULED'
+      })
+
+      showToast('Appointment rescheduled successfully!')
+      
+      // Close modal and reset state
+      closeBookingModal()
+      setAppointmentToReschedule(null)
+      
+      // Refresh appointments list
+      await fetchAppointments()
+    } catch (err) {
+      showToast(err.message || 'Failed to reschedule appointment', 'error')
     } finally {
       setLoading(false)
     }
@@ -376,6 +505,14 @@ export default function PatientView() {
     }
   }
 
+  // Load clinics and doctors for name mapping when component mounts
+  useEffect(() => {
+    if (userProfile?.userId) {
+      fetchClinics()
+      fetchDoctors()
+    }
+  }, [userProfile])
+
   const applyFilters = async () => {
     let filtered = [...clinics]
 
@@ -498,6 +635,7 @@ export default function PatientView() {
     setSelectedTimeSlot(null)
     setSelectedDoctor(null)
     setTimeSlots([])
+    setAppointmentToReschedule(null)
   }
 
   const totalPages = Math.ceil(filteredClinics.length / itemsPerPage)
@@ -675,20 +813,15 @@ export default function PatientView() {
         apptStatus: 'SCHEDULED'
       })
 
-      setSuccess('Appointment booked successfully!')
+      showToast('Appointment booked successfully!')
       
       // Close modal and reset booking state
       closeBookingModal()
       
       // Refresh appointments list
       await fetchAppointments()
-      
-      setTimeout(() => {
-        setSuccess('')
-      }, 2000)
     } catch (err) {
-      setError(err.message || 'Failed to book appointment')
-      setTimeout(() => setError(''), 5000)
+      showToast(err.message || 'Failed to book appointment', 'error')
     } finally {
       setLoading(false)
     }
@@ -799,8 +932,14 @@ export default function PatientView() {
       <div className="patient-layout">
         <Sidebar />
         <div className="patient-main">
-          {error && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
+          {toast && (
+            <Toast
+              message={toast.message}
+              type={toast.type}
+              onClose={() => setToast(null)}
+              duration={3000}
+            />
+          )}
 
           {currentView === 'dashboard' && (
             <>
@@ -906,81 +1045,108 @@ export default function PatientView() {
             <>
               <div className="page-header">
                 <h1>My Appointments</h1>
-                <div className="header-actions">
-                  <input
-                    type="number"
-                    placeholder="Clinic ID"
-                    value={clinicId || ''}
-                    onChange={(e) => setClinicId(Number(e.target.value))}
-                    className="input-sm"
-                  />
-                  <button onClick={createTestAppointment} className="btn btn-primary">
-                    Create Test Appointment
-                  </button>
-                  <button onClick={fetchAppointments} className="btn btn-secondary">
-                    Refresh
-                  </button>
+              </div>
+
+              {/* Appointment Filter */}
+              <div className="section-card">
+                <div className="appointment-filters">
+                  <div className="filter-group">
+                    <label>Filter Appointments</label>
+                    <div className="filter-buttons">
+                      <button
+                        className={`filter-btn ${appointmentFilter === 'upcoming' ? 'active' : ''}`}
+                        onClick={() => {
+                          setAppointmentFilter('upcoming')
+                          setPastAppointmentDateFilter('')
+                        }}
+                      >
+                        Upcoming
+                      </button>
+                      <button
+                        className={`filter-btn ${appointmentFilter === 'past' ? 'active' : ''}`}
+                        onClick={() => setAppointmentFilter('past')}
+                      >
+                        Past Appointments
+                      </button>
+                    </div>
+                  </div>
+                  {appointmentFilter === 'past' && (
+                    <div className="filter-group">
+                      <label>Filter by Date</label>
+                      <input
+                        type="date"
+                        value={pastAppointmentDateFilter}
+                        onChange={(e) => setPastAppointmentDateFilter(e.target.value)}
+                        className="input-sm"
+                        max={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="section-card">
                 {loading ? (
                   <div className="loading">Loading...</div>
-                ) : appointments.length === 0 ? (
+                ) : getFilteredAppointments().length === 0 ? (
                   <div className="empty-state">
-                    <p>No appointments found</p>
+                    <p>No {appointmentFilter} appointments found</p>
                   </div>
                 ) : (
                   <div className="appointments-list">
-                    {appointments.map((apt) => (
-                      <div key={apt.appointmentId} className="appointment-card-large">
-                        <div className="appointment-main">
-                          <div className="appointment-header">
-                            <h3>Appointment #{apt.appointmentId}</h3>
-                            <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                              {apt.apptStatus || 'PENDING'}
-                            </span>
-                          </div>
-                          <div className="appointment-details">
-                            <div className="detail-item">
-                              <span className="detail-label">Date & Time:</span>
-                              <span className="detail-value">
-                                {new Date(apt.dateTime).toLocaleString()}
+                    {getFilteredAppointments().map((apt) => {
+                      const within24Hours = isWithin24Hours(apt.dateTime)
+                      return (
+                        <div key={apt.appointmentId} className="appointment-card-large">
+                          <div className="appointment-main">
+                            <div className="appointment-header">
+                              <h3>Appointment #{apt.appointmentId}</h3>
+                            </div>
+                            <div className="appointment-status-badge">
+                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                {apt.apptStatus || 'PENDING'}
                               </span>
                             </div>
-                            <div className="detail-item">
-                              <span className="detail-label">Clinic ID:</span>
-                              <span className="detail-value">{apt.clinicId}</span>
-                            </div>
-                            {apt.doctorId && (
+                            <div className="appointment-details">
                               <div className="detail-item">
-                                <span className="detail-label">Doctor ID:</span>
-                                <span className="detail-value">{apt.doctorId}</span>
+                                <span className="detail-label">Date & Time:</span>
+                                <span className="detail-value">
+                                  {new Date(apt.dateTime).toLocaleString()}
+                                </span>
                               </div>
+                              <div className="detail-item">
+                                <span className="detail-label">Clinic:</span>
+                                <span className="detail-value">
+                                  {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
+                                </span>
+                              </div>
+                              {apt.doctorId && (
+                                <div className="detail-item">
+                                  <span className="detail-label">Doctor:</span>
+                                  <span className="detail-value">
+                                    {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="appointment-actions-vertical">
+                            <button
+                              onClick={() => handleRescheduleClick(apt)}
+                              className="btn btn-primary reschedule-btn"
+                              disabled={loading || within24Hours || appointmentFilter === 'past'}
+                            >
+                              Reschedule
+                            </button>
+                            {within24Hours && (
+                              <p className="reschedule-disabled-message">
+                                Cannot reschedule appointments within 24 hours
+                              </p>
                             )}
                           </div>
                         </div>
-                        <div className="appointment-actions-vertical">
-                          <button
-                            onClick={() => checkQueuePosition(apt.appointmentId)}
-                            className="btn btn-secondary"
-                            disabled={loading}
-                          >
-                            Check Queue Position
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedAppointment(apt.appointmentId)
-                              checkQueuePosition(apt.appointmentId)
-                            }}
-                            className="btn btn-outline"
-                            disabled={loading}
-                          >
-                            View Queue Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1326,7 +1492,7 @@ export default function PatientView() {
                 <div className="modal-overlay" onClick={closeBookingModal}>
                   <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                     <div className="modal-header">
-                      <h2>Book Appointment - {selectedClinic.name}</h2>
+                      <h2>{appointmentToReschedule ? 'Reschedule Appointment' : 'Book Appointment'} - {selectedClinic.name}</h2>
                       <button className="modal-close" onClick={closeBookingModal}>×</button>
                     </div>
                     <div className="modal-body">
@@ -1559,11 +1725,14 @@ export default function PatientView() {
                           </div>
                           <div className="modal-actions">
                             <button
-                              onClick={handleBookAppointment}
+                              onClick={appointmentToReschedule ? handleRescheduleAppointment : handleBookAppointment}
                               className="btn btn-primary"
                               disabled={loading}
                             >
-                              {loading ? 'Booking...' : 'Confirm Booking'}
+                              {loading 
+                                ? (appointmentToReschedule ? 'Rescheduling...' : 'Booking...') 
+                                : (appointmentToReschedule ? 'Confirm Reschedule' : 'Confirm Booking')
+                              }
                             </button>
                             <button
                               onClick={closeBookingModal}
