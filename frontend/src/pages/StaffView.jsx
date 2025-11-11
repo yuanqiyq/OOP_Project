@@ -40,6 +40,18 @@ export default function StaffView() {
   const [editingDoctor, setEditingDoctor] = useState(null)
   const [newDoctor, setNewDoctor] = useState({ fname: '', lname: '', shiftDays: [] })
   const [filledDays, setFilledDays] = useState(new Set())
+  
+  // Appointments tab state
+  const [appointmentsTab, setAppointmentsTab] = useState('upcoming') // 'upcoming', 'history', 'cancelled'
+  
+  // Medical history modal state
+  const [showMedicalHistoryModal, setShowMedicalHistoryModal] = useState(false)
+  const [selectedPatientForHistory, setSelectedPatientForHistory] = useState(null)
+  const [patientAppointmentsHistory, setPatientAppointmentsHistory] = useState([])
+  
+  // Treatment summary modal state
+  const [showTreatmentSummaryModal, setShowTreatmentSummaryModal] = useState(false)
+  const [selectedAppointmentForSummary, setSelectedAppointmentForSummary] = useState(null)
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -282,6 +294,124 @@ export default function StaffView() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Cancel appointment (bypasses 24h restriction for staff)
+  const cancelAppointment = async (appointmentId) => {
+    if (!window.confirm('Are you sure you want to cancel this appointment?')) {
+      return
+    }
+    
+    try {
+      setLoading(true)
+      await appointmentAPI.updateStatus(appointmentId, 'CANCELLED')
+      setError('')
+      setSuccess('Appointment cancelled successfully')
+      setTimeout(() => setSuccess(''), 3000)
+      await fetchAppointments()
+    } catch (err) {
+      setError(err.message || 'Failed to cancel appointment')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Get upcoming appointments (future appointments that are not cancelled or completed)
+  const getUpcomingAppointments = () => {
+    const now = new Date()
+    return appointments.filter(apt => {
+      // First check status - cancelled and completed should never be in upcoming
+      const status = apt.apptStatus?.toUpperCase() || ''
+      if (status === 'CANCELLED' || status === 'COMPLETED') {
+        return false
+      }
+      // Then check if it's a future appointment
+      const aptDate = new Date(apt.dateTime)
+      return aptDate > now
+    })
+  }
+
+  // Get completed appointments (all appointments with COMPLETED status, regardless of date)
+  const getHistoryAppointments = () => {
+    return appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      return status === 'COMPLETED'
+    })
+  }
+
+  // Get cancelled appointments (all appointments with CANCELLED status, regardless of date)
+  const getCancelledAppointments = () => {
+    return appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      return status === 'CANCELLED'
+    })
+  }
+
+  // Open medical history modal for a patient
+  const openMedicalHistoryModal = async (patientId) => {
+    try {
+      setLoading(true)
+      setSelectedPatientForHistory(patientId)
+      const history = await appointmentAPI.getByPatientId(patientId)
+      // Sort by date descending (most recent first)
+      const sortedHistory = (history || []).sort((a, b) => {
+        return new Date(b.dateTime) - new Date(a.dateTime)
+      })
+      setPatientAppointmentsHistory(sortedHistory)
+      setShowMedicalHistoryModal(true)
+      setError('')
+    } catch (err) {
+      setError(err.message || 'Failed to load medical history')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Format date and time helper
+  const formatDateTime = (dateTime) => {
+    let formattedDate, formattedTime
+    if (typeof dateTime === 'string') {
+      const dateMatch = dateTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+      if (dateMatch) {
+        const [, year, month, day, hour, minute] = dateMatch
+        const monthNum = parseInt(month, 10)
+        const dayNum = parseInt(day, 10)
+        const hourNum = parseInt(hour, 10)
+        const minuteNum = parseInt(minute, 10)
+        
+        formattedDate = `${monthNum}/${dayNum}/${year}`
+        const period = hourNum >= 12 ? 'PM' : 'AM'
+        const displayHours = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum
+        formattedTime = `${displayHours}:${minuteNum.toString().padStart(2, '0')} ${period}`
+      } else {
+        const dateTimeObj = new Date(dateTime)
+        formattedDate = dateTimeObj.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'numeric', 
+          day: 'numeric' 
+        })
+        const hours = dateTimeObj.getHours()
+        const minutes = dateTimeObj.getMinutes()
+        const period = hours >= 12 ? 'PM' : 'AM'
+        const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+        formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+      }
+    } else {
+      const dateTimeObj = new Date(dateTime)
+      formattedDate = dateTimeObj.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'numeric', 
+        day: 'numeric' 
+      })
+      const hours = dateTimeObj.getHours()
+      const minutes = dateTimeObj.getMinutes()
+      const period = hours >= 12 ? 'PM' : 'AM'
+      const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+      formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+    }
+    return { formattedDate, formattedTime }
   }
 
   const openCheckInModal = (appointmentId) => {
@@ -873,152 +1003,368 @@ export default function StaffView() {
                 </div>
               </div>
 
-              <div className="section-card">
-                <div className="section-header">
-                  <h2>Clinic Appointments ({appointments.length})</h2>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        fetchAppointments()
-                        // Filter logic can be added here
-                      }
-                    }}
-                    className="select-input"
-                  >
-                    <option value="">All Status</option>
-                    <option value="SCHEDULED">Scheduled</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="CANCELLED">Cancelled</option>
-                  </select>
-                </div>
-                {loading ? (
-                  <div className="loading">Loading...</div>
-                ) : appointments.length === 0 ? (
-                  <div className="empty-state">No appointments found</div>
-                ) : (
-                  <div className="appointments-table-container">
-                    <table className="appointments-table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Patient Name</th>
-                          <th>Doctor Name</th>
-                          <th>Date & Time</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {appointments.map((apt) => {
-                          // Find patient name
-                          const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
-                          const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
-                          
-                          // Find doctor name
-                          const doctor = doctors.find(d => d.id === apt.doctorId)
-                          const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
-                          
-                          // Format date and time properly (avoid timezone issues)
-                          // Parse the date string directly to avoid timezone conversion
-                          let formattedDate, formattedTime
-                          if (typeof apt.dateTime === 'string') {
-                            // Parse ISO format string directly (e.g., "2025-11-09T09:15:00")
-                            const dateMatch = apt.dateTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
-                            if (dateMatch) {
-                              const [, year, month, day, hour, minute] = dateMatch
-                              const monthNum = parseInt(month, 10)
-                              const dayNum = parseInt(day, 10)
-                              const hourNum = parseInt(hour, 10)
-                              const minuteNum = parseInt(minute, 10)
-                              
-                              // Format date
-                              formattedDate = `${monthNum}/${dayNum}/${year}`
-                              
-                              // Format time
-                              const period = hourNum >= 12 ? 'PM' : 'AM'
-                              const displayHours = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum
-                              formattedTime = `${displayHours}:${minuteNum.toString().padStart(2, '0')} ${period}`
-                            } else {
-                              // Fallback to Date object parsing
-                              const dateTime = new Date(apt.dateTime)
-                              formattedDate = dateTime.toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'numeric', 
-                                day: 'numeric' 
-                              })
-                              const hours = dateTime.getHours()
-                              const minutes = dateTime.getMinutes()
-                              const period = hours >= 12 ? 'PM' : 'AM'
-                              const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
-                              formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
-                            }
-                          } else {
-                            // If it's already a Date object or number
-                            const dateTime = new Date(apt.dateTime)
-                            formattedDate = dateTime.toLocaleDateString('en-US', { 
-                              year: 'numeric', 
-                              month: 'numeric', 
-                              day: 'numeric' 
-                            })
-                            const hours = dateTime.getHours()
-                            const minutes = dateTime.getMinutes()
-                            const period = hours >= 12 ? 'PM' : 'AM'
-                            const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
-                            formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
-                          }
-                          
-                          return (
-                          <tr key={apt.appointmentId}>
-                            <td>#{apt.appointmentId}</td>
-                            <td>{patientName}</td>
-                            <td>{doctorName}</td>
-                            <td>{formattedDate}, {formattedTime}</td>
-                            <td>
-                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                                {apt.apptStatus || 'PENDING'}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="action-buttons-small">
-                                <button
-                                  onClick={() => openCheckInModal(apt.appointmentId)}
-                                  className="btn btn-primary btn-sm"
-                                  disabled={loading || apt.apptStatus === 'COMPLETED'}
-                                  title="Check in patient to queue"
-                                >
-                                  ✓ Check In
-                                </button>
-                                <button
-                                  onClick={() => updateAppointmentStatus(apt.appointmentId, 'COMPLETED')}
-                                  className="btn btn-success btn-sm"
-                                  disabled={loading || apt.apptStatus === 'COMPLETED'}
-                                >
-                                  ✓
-                                </button>
-                                <button
-                                  onClick={() => updateAppointmentStatus(apt.appointmentId, 'CANCELLED')}
-                                  className="btn btn-warning btn-sm"
-                                  disabled={loading || apt.apptStatus === 'CANCELLED'}
-                                >
-                                  ✕
-                                </button>
-                                <button
-                                  onClick={() => fetchQueueHistory(apt.appointmentId)}
-                                  className="btn btn-outline btn-sm"
-                                  disabled={loading}
-                                >
-                                  📋
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+              {/* Tabs */}
+              <div className="appointments-tabs">
+                <button
+                  className={`tab-button ${appointmentsTab === 'upcoming' ? 'active' : ''}`}
+                  onClick={() => setAppointmentsTab('upcoming')}
+                >
+                  Upcoming ({getUpcomingAppointments().length})
+                </button>
+                <button
+                  className={`tab-button ${appointmentsTab === 'history' ? 'active' : ''}`}
+                  onClick={() => setAppointmentsTab('history')}
+                >
+                  History ({getHistoryAppointments().length})
+                </button>
+                <button
+                  className={`tab-button ${appointmentsTab === 'cancelled' ? 'active' : ''}`}
+                  onClick={() => setAppointmentsTab('cancelled')}
+                >
+                  Cancelled ({getCancelledAppointments().length})
+                </button>
               </div>
+
+              {/* Upcoming Appointments Tab */}
+              {appointmentsTab === 'upcoming' && (
+                <div className="section-card">
+                  <div className="section-header">
+                    <h2>Upcoming Appointments ({getUpcomingAppointments().length})</h2>
+                  </div>
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getUpcomingAppointments().length === 0 ? (
+                    <div className="empty-state">No upcoming appointments found</div>
+                  ) : (
+                    <div className="appointments-table-container">
+                      <table className="appointments-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Patient Name</th>
+                            <th>Doctor Name</th>
+                            <th>Date & Time</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getUpcomingAppointments().map((apt) => {
+                            const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
+                            const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
+                            
+                            const doctor = doctors.find(d => d.id === apt.doctorId)
+                            const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                            
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            
+                            return (
+                              <tr key={apt.appointmentId}>
+                                <td>#{apt.appointmentId}</td>
+                                <td>{patientName}</td>
+                                <td>{doctorName}</td>
+                                <td>{formattedDate}, {formattedTime}</td>
+                                <td>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                    {apt.apptStatus || 'PENDING'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="action-buttons-small">
+                                    <button
+                                      onClick={() => cancelAppointment(apt.appointmentId)}
+                                      className="btn btn-warning btn-sm"
+                                      disabled={loading || apt.apptStatus === 'CANCELLED'}
+                                      title="Cancel appointment"
+                                    >
+                                      ✕ Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => openMedicalHistoryModal(apt.patientId)}
+                                      className="btn btn-outline btn-sm"
+                                      disabled={loading}
+                                      title="View patient medical history"
+                                    >
+                                      📋 Medical History
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* History Tab (Completed Appointments) */}
+              {appointmentsTab === 'history' && (
+                <div className="section-card">
+                  <div className="section-header">
+                    <h2>Appointment History ({getHistoryAppointments().length})</h2>
+                  </div>
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getHistoryAppointments().length === 0 ? (
+                    <div className="empty-state">No completed appointments found</div>
+                  ) : (
+                    <div className="appointments-table-container">
+                      <table className="appointments-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Patient Name</th>
+                            <th>Doctor Name</th>
+                            <th>Date & Time</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getHistoryAppointments().map((apt) => {
+                            const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
+                            const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
+                            
+                            const doctor = doctors.find(d => d.id === apt.doctorId)
+                            const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                            
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            
+                            return (
+                              <tr 
+                                key={apt.appointmentId}
+                                className="appointment-row-clickable"
+                                onClick={() => {
+                                  setSelectedAppointmentForSummary(apt)
+                                  setShowTreatmentSummaryModal(true)
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <td>#{apt.appointmentId}</td>
+                                <td>{patientName}</td>
+                                <td>{doctorName}</td>
+                                <td>{formattedDate}, {formattedTime}</td>
+                                <td>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                    {apt.apptStatus || 'PENDING'}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Cancelled Appointments Tab */}
+              {appointmentsTab === 'cancelled' && (
+                <div className="section-card">
+                  <div className="section-header">
+                    <h2>Cancelled Appointments ({getCancelledAppointments().length})</h2>
+                  </div>
+                  {loading ? (
+                    <div className="loading">Loading...</div>
+                  ) : getCancelledAppointments().length === 0 ? (
+                    <div className="empty-state">No cancelled appointments found</div>
+                  ) : (
+                    <div className="appointments-table-container">
+                      <table className="appointments-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Patient Name</th>
+                            <th>Doctor Name</th>
+                            <th>Date & Time</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getCancelledAppointments().map((apt) => {
+                            const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
+                            const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
+                            
+                            const doctor = doctors.find(d => d.id === apt.doctorId)
+                            const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                            
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            
+                            return (
+                              <tr key={apt.appointmentId}>
+                                <td>#{apt.appointmentId}</td>
+                                <td>{patientName}</td>
+                                <td>{doctorName}</td>
+                                <td>{formattedDate}, {formattedTime}</td>
+                                <td>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                    {apt.apptStatus || 'PENDING'}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Medical History Modal */}
+              {showMedicalHistoryModal && selectedPatientForHistory && (() => {
+                const patient = patients.find(p => p.patientId === selectedPatientForHistory || p.userId === selectedPatientForHistory)
+                const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${selectedPatientForHistory}`
+                
+                return (
+                  <div className="modal-overlay" onClick={() => {
+                    if (!loading) {
+                      setShowMedicalHistoryModal(false)
+                      setSelectedPatientForHistory(null)
+                      setPatientAppointmentsHistory([])
+                    }
+                  }}>
+                    <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+                      <div className="modal-header">
+                        <div>
+                          <h2>Medical History</h2>
+                          <p className="subtitle" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{patientName}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!loading) {
+                              setShowMedicalHistoryModal(false)
+                              setSelectedPatientForHistory(null)
+                              setPatientAppointmentsHistory([])
+                            }
+                          }}
+                          className="btn-close"
+                          disabled={loading}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="modal-body">
+                      {loading ? (
+                        <div className="loading">Loading medical history...</div>
+                      ) : patientAppointmentsHistory.length === 0 ? (
+                        <div className="empty-state">No appointment history found for this patient</div>
+                      ) : (
+                        <div className="medical-history-list">
+                          {patientAppointmentsHistory.map((apt) => {
+                            const doctor = doctors.find(d => d.id === apt.doctorId)
+                            const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            
+                            return (
+                              <div key={apt.appointmentId} className="medical-history-item">
+                                <div className="medical-history-header">
+                                  <div>
+                                    <h3>Appointment #{apt.appointmentId}</h3>
+                                    <p className="medical-history-date">{formattedDate}, {formattedTime}</p>
+                                    <p className="medical-history-doctor">Doctor: {doctorName}</p>
+                                  </div>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                    {apt.apptStatus || 'PENDING'}
+                                  </span>
+                                </div>
+                                {apt.treatmentSummary && (
+                                  <div className="treatment-summary-section">
+                                    <h4>Treatment Summary</h4>
+                                    <div className="treatment-summary-content">
+                                      {apt.treatmentSummary}
+                                    </div>
+                                  </div>
+                                )}
+                                {!apt.treatmentSummary && apt.apptStatus === 'COMPLETED' && (
+                                  <div className="treatment-summary-section">
+                                    <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Treatment Summary Modal */}
+              {showTreatmentSummaryModal && selectedAppointmentForSummary && (() => {
+                const patient = patients.find(p => p.patientId === selectedAppointmentForSummary.patientId || p.userId === selectedAppointmentForSummary.patientId)
+                const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${selectedAppointmentForSummary.patientId}`
+                
+                const doctor = doctors.find(d => d.id === selectedAppointmentForSummary.doctorId)
+                const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (selectedAppointmentForSummary.doctorId ? `Doctor #${selectedAppointmentForSummary.doctorId}` : 'N/A')
+                const { formattedDate, formattedTime } = formatDateTime(selectedAppointmentForSummary.dateTime)
+                
+                return (
+                  <div className="modal-overlay" onClick={() => {
+                    setShowTreatmentSummaryModal(false)
+                    setSelectedAppointmentForSummary(null)
+                  }}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                      <div className="modal-header">
+                        <div>
+                          <h2>Treatment Summary</h2>
+                          <p className="subtitle" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                            Appointment #{selectedAppointmentForSummary.appointmentId}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setShowTreatmentSummaryModal(false)
+                            setSelectedAppointmentForSummary(null)
+                          }}
+                          className="btn-close"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="modal-body">
+                        <div className="treatment-summary-details">
+                          <div className="summary-info-item">
+                            <span className="summary-label">Patient:</span>
+                            <span className="summary-value">{patientName}</span>
+                          </div>
+                          <div className="summary-info-item">
+                            <span className="summary-label">Doctor:</span>
+                            <span className="summary-value">{doctorName}</span>
+                          </div>
+                          <div className="summary-info-item">
+                            <span className="summary-label">Date & Time:</span>
+                            <span className="summary-value">{formattedDate}, {formattedTime}</span>
+                          </div>
+                          <div className="summary-info-item">
+                            <span className="summary-label">Status:</span>
+                            <span className={`status-badge status-${selectedAppointmentForSummary.apptStatus?.toLowerCase() || 'pending'}`}>
+                              {selectedAppointmentForSummary.apptStatus || 'PENDING'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {selectedAppointmentForSummary.treatmentSummary ? (
+                          <div className="treatment-summary-section" style={{ marginTop: '1.5rem' }}>
+                            <h4>Treatment Summary</h4>
+                            <div className="treatment-summary-content">
+                              {selectedAppointmentForSummary.treatmentSummary}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="treatment-summary-section" style={{ marginTop: '1.5rem' }}>
+                            <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )}
 

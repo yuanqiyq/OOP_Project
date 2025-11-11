@@ -463,6 +463,10 @@
   box-shadow: 0 20px 60px rgba(78, 205, 196, 0.3);
 }
 
+.modal-large {
+  max-width: 900px;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -534,6 +538,40 @@
   font-size: 0.95rem;
 }
 
+/* Appointments Tabs */
+.appointments-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid rgba(78, 205, 196, 0.1);
+  padding-bottom: 0;
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s;
+  position: relative;
+  bottom: -2px;
+}
+
+.tab-button:hover {
+  color: var(--teal-primary);
+  background: var(--gradient-glow);
+}
+
+.tab-button.active {
+  color: var(--teal-primary);
+  border-bottom-color: var(--teal-primary);
+  background: transparent;
+}
+
 /* Appointments Table */
 .appointments-table-container {
   overflow-x: auto;
@@ -569,6 +607,16 @@
 
 .appointments-table tbody tr:hover {
   background: var(--gradient-glow);
+}
+
+.appointment-row-clickable {
+  transition: all 0.2s;
+}
+
+.appointment-row-clickable:hover {
+  background: var(--gradient-glow) !important;
+  transform: translateX(2px);
+  box-shadow: inset 4px 0 0 var(--teal-primary);
 }
 
 .action-buttons-small {
@@ -1022,6 +1070,115 @@
   font-size: 0.9rem;
 }
 
+/* Medical History Styles */
+.medical-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.medical-history-item {
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(78, 205, 196, 0.15);
+  transition: all 0.3s;
+}
+
+.medical-history-item:hover {
+  background: var(--gradient-card);
+  border-color: rgba(78, 205, 196, 0.25);
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.1);
+}
+
+.medical-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
+}
+
+.medical-history-header h3 {
+  color: var(--teal-dark);
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.medical-history-date {
+  color: #666;
+  font-size: 0.95rem;
+  margin: 0.25rem 0;
+}
+
+.medical-history-doctor {
+  color: #666;
+  font-size: 0.95rem;
+  margin: 0.25rem 0;
+  font-weight: 500;
+}
+
+.treatment-summary-section {
+  margin-top: 1rem;
+}
+
+.treatment-summary-section h4 {
+  color: var(--teal-dark);
+  font-size: 1rem;
+  margin: 0 0 0.75rem 0;
+  font-weight: 600;
+}
+
+.treatment-summary-content {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 1rem;
+  color: #2d2d2d;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  border: 1px solid rgba(78, 205, 196, 0.1);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.no-treatment-summary {
+  color: #999;
+  font-style: italic;
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+/* Treatment Summary Details */
+.treatment-summary-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  border: 1px solid rgba(78, 205, 196, 0.15);
+}
+
+.summary-info-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.summary-label {
+  font-weight: 600;
+  color: var(--teal-dark);
+  min-width: 120px;
+  font-size: 0.95rem;
+}
+
+.summary-value {
+  color: #2d2d2d;
+  font-size: 0.95rem;
+  flex: 1;
+}
+
 .modal-close {
   background: transparent;
   border: none;
@@ -1096,5 +1253,47 @@
   .shift-day-button {
     min-width: 70px;
     padding: 0.75rem;
+  }
+
+  .appointments-tabs {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .tab-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .appointments-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .appointments-table {
+    font-size: 0.85rem;
+  }
+
+  .appointments-table th,
+  .appointments-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .action-buttons-small {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .action-buttons-small .btn-sm {
+    width: 100%;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .modal-large {
+    max-width: 95%;
+    padding: 1rem;
   }
 }
