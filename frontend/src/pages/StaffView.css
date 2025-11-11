@@ -1413,21 +1413,29 @@ body.modal-open {
   padding: 1.5rem;
   border: 1px solid rgba(78, 205, 196, 0.15);
   transition: all 0.3s;
+  cursor: pointer;
 }
 
 .medical-history-item:hover {
   background: var(--gradient-card);
   border-color: rgba(78, 205, 196, 0.25);
   box-shadow: 0 4px 16px rgba(78, 205, 196, 0.1);
+  transform: translateY(-2px);
+}
+
+.medical-history-item.expanded {
+  background: var(--gradient-card);
+  border-color: rgba(78, 205, 196, 0.3);
+  box-shadow: 0 6px 20px rgba(78, 205, 196, 0.15);
 }
 
 .medical-history-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .medical-history-header h3 {
@@ -1450,7 +1458,21 @@ body.modal-open {
 }
 
 .treatment-summary-section {
-  margin-top: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid rgba(78, 205, 196, 0.15);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .treatment-summary-section h4 {
