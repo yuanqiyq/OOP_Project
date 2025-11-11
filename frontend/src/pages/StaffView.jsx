@@ -52,6 +52,12 @@ export default function StaffView() {
   // Treatment summary modal state
   const [showTreatmentSummaryModal, setShowTreatmentSummaryModal] = useState(false)
   const [selectedAppointmentForSummary, setSelectedAppointmentForSummary] = useState(null)
+  
+  // Filter state
+  const [filterDate, setFilterDate] = useState('')
+  const [filterDoctor, setFilterDoctor] = useState('')
+  const [filterDoctorSearch, setFilterDoctorSearch] = useState('')
+  const [showDoctorDropdown, setShowDoctorDropdown] = useState(false)
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -80,6 +86,29 @@ export default function StaffView() {
       return () => clearInterval(interval)
     }
   }, [autoRefresh, clinicId, location])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const target = event.target
+      const isInsideDropdown = target.closest('.searchable-dropdown') || 
+                               target.closest('.dropdown-menu') ||
+                               target.closest('.dropdown-item') ||
+                               target.closest('.clear-filter-btn')
+      
+      if (!isInsideDropdown) {
+        setShowDoctorDropdown(false)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside, true)
+    document.addEventListener('click', handleClickOutside, true)
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true)
+      document.removeEventListener('click', handleClickOutside, true)
+    }
+  }, [])
 
   const fetchStaffClinic = async () => {
     try {
@@ -317,10 +346,40 @@ export default function StaffView() {
     }
   }
 
+  // Apply filters to appointments
+  const applyFilters = (aptList) => {
+    let filtered = aptList
+
+    // Filter by doctor
+    if (filterDoctor) {
+      filtered = filtered.filter(apt => apt.doctorId === parseInt(filterDoctor))
+    }
+
+    // Filter by date
+    if (filterDate) {
+      filtered = filtered.filter(apt => {
+        const aptDate = new Date(apt.dateTime)
+        const filterDateObj = new Date(filterDate)
+        // Compare dates only (ignore time)
+        return aptDate.toDateString() === filterDateObj.toDateString()
+      })
+    }
+
+    return filtered
+  }
+
+  // Get filtered doctors for dropdown
+  const getFilteredDoctors = () => {
+    if (!filterDoctorSearch) return doctors
+    return doctors.filter(d => 
+      `${d.fname} ${d.lname}`.toLowerCase().includes(filterDoctorSearch.toLowerCase())
+    )
+  }
+
   // Get upcoming appointments (future appointments that are not cancelled or completed)
   const getUpcomingAppointments = () => {
     const now = new Date()
-    return appointments.filter(apt => {
+    const upcoming = appointments.filter(apt => {
       // First check status - cancelled and completed should never be in upcoming
       const status = apt.apptStatus?.toUpperCase() || ''
       if (status === 'CANCELLED' || status === 'COMPLETED') {
@@ -330,22 +389,25 @@ export default function StaffView() {
       const aptDate = new Date(apt.dateTime)
       return aptDate > now
     })
+    return applyFilters(upcoming)
   }
 
   // Get completed appointments (all appointments with COMPLETED status, regardless of date)
   const getHistoryAppointments = () => {
-    return appointments.filter(apt => {
+    const history = appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
       return status === 'COMPLETED'
     })
+    return applyFilters(history)
   }
 
   // Get cancelled appointments (all appointments with CANCELLED status, regardless of date)
   const getCancelledAppointments = () => {
-    return appointments.filter(apt => {
+    const cancelled = appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
       return status === 'CANCELLED'
     })
+    return applyFilters(cancelled)
   }
 
   // Open medical history modal for a patient
@@ -1000,6 +1062,83 @@ export default function StaffView() {
                   <button onClick={fetchAppointments} className="btn btn-secondary">
                     Refresh
                   </button>
+                </div>
+              </div>
+
+              {/* Filters Section */}
+              <div className="section-card">
+                <h2>Search & Filter</h2>
+                <div className="filters-grid">
+                  <div className="form-group">
+                    <label>Doctor</label>
+                    <div className="searchable-dropdown">
+                      <input
+                        type="text"
+                        placeholder="Search by doctor name"
+                        value={filterDoctorSearch}
+                        onChange={(e) => {
+                          setFilterDoctorSearch(e.target.value)
+                          setShowDoctorDropdown(true)
+                        }}
+                        onFocus={() => setShowDoctorDropdown(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="input-sm"
+                      />
+                      {showDoctorDropdown && getFilteredDoctors().length > 0 && (
+                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                          {getFilteredDoctors().map((doctor) => (
+                            <div
+                              key={doctor.id}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFilterDoctor(doctor.id.toString())
+                                setFilterDoctorSearch(`Dr. ${doctor.fname} ${doctor.lname}`)
+                                setShowDoctorDropdown(false)
+                              }}
+                            >
+                              Dr. {doctor.fname} {doctor.lname}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {filterDoctor && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setFilterDoctor('')
+                            setFilterDoctorSearch('')
+                          }}
+                          type="button"
+                          aria-label="Clear doctor filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Date</label>
+                    <div className="input-with-clear">
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        className="input-sm"
+                      />
+                      {filterDate && (
+                        <button
+                          type="button"
+                          className="clear-filter-btn"
+                          onClick={() => setFilterDate('')}
+                          title="Clear date filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
