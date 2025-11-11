@@ -36,6 +36,19 @@ export default function PatientView() {
   const [expandedAppointmentId, setExpandedAppointmentId] = useState(null) // Track which appointment is expanded
   const [medicalHistoryFilter, setMedicalHistoryFilter] = useState('past') // 'past' or 'archive'
   
+  // Treatment summary modal state
+  const [showTreatmentSummaryModal, setShowTreatmentSummaryModal] = useState(false)
+  const [selectedAppointmentForSummary, setSelectedAppointmentForSummary] = useState(null)
+  
+  // Medical history filter state
+  const [medicalHistoryFilterDate, setMedicalHistoryFilterDate] = useState('')
+  const [medicalHistoryFilterDoctor, setMedicalHistoryFilterDoctor] = useState('')
+  const [medicalHistoryFilterDoctorSearch, setMedicalHistoryFilterDoctorSearch] = useState('')
+  const [medicalHistoryFilterClinic, setMedicalHistoryFilterClinic] = useState('')
+  const [medicalHistoryFilterClinicSearch, setMedicalHistoryFilterClinicSearch] = useState('')
+  const [showMedicalHistoryDoctorDropdown, setShowMedicalHistoryDoctorDropdown] = useState(false)
+  const [showMedicalHistoryClinicDropdown, setShowMedicalHistoryClinicDropdown] = useState(false)
+  
   // Reschedule state
   const [appointmentToReschedule, setAppointmentToReschedule] = useState(null)
   
@@ -111,6 +124,30 @@ export default function PatientView() {
       setDoctorNames(namesMap)
     }
   }, [doctors])
+
+  // Auto-check queue position for upcoming appointments
+  useEffect(() => {
+    const isDashboard = !location.pathname.includes('/appointments') && 
+                        !location.pathname.includes('/medical-history') && 
+                        !location.pathname.includes('/settings') &&
+                        !location.pathname.includes('/book')
+    
+    if (isDashboard && appointments.length > 0 && !selectedAppointment) {
+      // Find the first upcoming appointment that's not cancelled
+      const upcomingAppts = getFilteredAppointments()
+      if (upcomingAppts.length > 0) {
+        const upcomingAppt = upcomingAppts[0]
+        // Auto-check queue position for the first upcoming appointment
+        checkQueuePosition(upcomingAppt.appointmentId).catch(err => {
+          // Silently fail if not in queue - this is expected for appointments not checked in
+          if (!err.message?.includes('404') && !err.message?.includes('Not Found')) {
+            console.error('Error checking queue position:', err)
+          }
+        })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments, location, selectedAppointment])
 
   useEffect(() => {
     // Use SSE for real-time queue position updates (on dashboard)
@@ -227,23 +264,120 @@ export default function PatientView() {
   // Filter appointments based on selected filter (for upcoming appointments tab)
   const getFilteredAppointments = () => {
     const now = new Date()
-    // Always show upcoming appointments that are not cancelled for the upcoming tab
-    return appointments.filter(apt => 
-      new Date(apt.dateTime) > now && apt.apptStatus !== 'CANCELLED'
+    // Always show upcoming appointments that are not cancelled and not completed
+    return appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      const aptDate = new Date(apt.dateTime)
+      return aptDate > now && status !== 'CANCELLED' && status !== 'COMPLETED'
+    })
+  }
+
+  // Apply medical history filters
+  const applyMedicalHistoryFilters = (aptList) => {
+    let filtered = aptList
+
+    // Filter by doctor
+    if (medicalHistoryFilterDoctor) {
+      filtered = filtered.filter(apt => apt.doctorId === parseInt(medicalHistoryFilterDoctor))
+    }
+
+    // Filter by clinic
+    if (medicalHistoryFilterClinic) {
+      filtered = filtered.filter(apt => apt.clinicId === parseInt(medicalHistoryFilterClinic))
+    }
+
+    // Filter by date
+    if (medicalHistoryFilterDate) {
+      filtered = filtered.filter(apt => {
+        const aptDate = new Date(apt.dateTime)
+        const filterDateObj = new Date(medicalHistoryFilterDate)
+        // Compare dates only (ignore time)
+        return aptDate.toDateString() === filterDateObj.toDateString()
+      })
+    }
+
+    return filtered
+  }
+
+  // Get filtered doctors for medical history dropdown
+  const getFilteredDoctorsForHistory = () => {
+    if (!medicalHistoryFilterDoctorSearch) return doctors
+    return doctors.filter(d => 
+      `${d.fname} ${d.lname}`.toLowerCase().includes(medicalHistoryFilterDoctorSearch.toLowerCase())
+    )
+  }
+
+  // Get filtered clinics for medical history dropdown
+  const getFilteredClinicsForHistory = () => {
+    if (!medicalHistoryFilterClinicSearch) return clinics
+    return clinics.filter(c => 
+      c.name?.toLowerCase().includes(medicalHistoryFilterClinicSearch.toLowerCase())
     )
   }
 
   // Get past appointments for medical history
   const getPastAppointments = () => {
     const now = new Date()
-    return appointments.filter(apt => 
-      new Date(apt.dateTime) <= now && apt.apptStatus !== 'CANCELLED'
-    )
+    const past = appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      const aptDate = new Date(apt.dateTime)
+      return aptDate <= now && status !== 'CANCELLED'
+    })
+    return applyMedicalHistoryFilters(past)
   }
 
   // Get cancelled appointments for archive
   const getCancelledAppointments = () => {
-    return appointments.filter(apt => apt.apptStatus === 'CANCELLED')
+    const cancelled = appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      return status === 'CANCELLED'
+    })
+    return applyMedicalHistoryFilters(cancelled)
+  }
+
+  // Format date and time helper
+  const formatDateTime = (dateTime) => {
+    let formattedDate, formattedTime
+    if (typeof dateTime === 'string') {
+      const dateMatch = dateTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
+      if (dateMatch) {
+        const [, year, month, day, hour, minute] = dateMatch
+        const monthNum = parseInt(month, 10)
+        const dayNum = parseInt(day, 10)
+        const hourNum = parseInt(hour, 10)
+        const minuteNum = parseInt(minute, 10)
+        
+        formattedDate = `${monthNum}/${dayNum}/${year}`
+        const period = hourNum >= 12 ? 'PM' : 'AM'
+        const displayHours = hourNum > 12 ? hourNum - 12 : hourNum === 0 ? 12 : hourNum
+        formattedTime = `${displayHours}:${minuteNum.toString().padStart(2, '0')} ${period}`
+      } else {
+        const dateTimeObj = new Date(dateTime)
+        formattedDate = dateTimeObj.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'numeric', 
+          day: 'numeric' 
+        })
+        const hours = dateTimeObj.getHours()
+        const minutes = dateTimeObj.getMinutes()
+        const period = hours >= 12 ? 'PM' : 'AM'
+        const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+        formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+      }
+    } else {
+      const dateTimeObj = new Date(dateTime)
+      formattedDate = dateTimeObj.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'numeric', 
+        day: 'numeric' 
+      })
+      const hours = dateTimeObj.getHours()
+      const minutes = dateTimeObj.getMinutes()
+      const period = hours >= 12 ? 'PM' : 'AM'
+      const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+      formattedTime = `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`
+    }
+    return { formattedDate, formattedTime }
   }
 
   // Handle reschedule button click
@@ -380,12 +514,16 @@ export default function PatientView() {
     }
   }, [location.pathname])
 
-  // Fetch clinics and doctors for booking
+  // Fetch clinics and doctors for booking and medical history
   useEffect(() => {
-    if (getCurrentView() === 'appointments') {
+    const currentView = getCurrentView()
+    if (currentView === 'appointments') {
       fetchClinics()
       fetchDoctors()
       requestLocationPermission()
+    } else if (currentView === 'medical-history') {
+      fetchClinics()
+      fetchDoctors()
     }
   }, [location.pathname])
 
@@ -410,26 +548,28 @@ export default function PatientView() {
   useEffect(() => {
     const handleClickOutside = (event) => {
       const target = event.target
-      // Check if click is outside any searchable dropdown
-      const isInsideDropdown = target.closest('.searchable-dropdown') || 
-                               target.closest('.dropdown-menu') ||
-                               target.closest('.dropdown-item') ||
-                               target.closest('.clear-filter-btn')
+      // Check if click is inside any searchable dropdown or its children
+      // This includes the input field, dropdown menu, dropdown items, and clear buttons
+      const isInsideDropdown = target.closest('.searchable-dropdown') !== null || 
+                               target.closest('.dropdown-menu') !== null ||
+                               target.closest('.dropdown-item') !== null ||
+                               target.closest('.clear-filter-btn') !== null
       
+      // Only close if click is completely outside all dropdown areas
       if (!isInsideDropdown) {
         setShowDoctorDropdown(false)
         setShowSpecialtyDropdown(false)
         setShowRegionDropdown(false)
+        setShowMedicalHistoryDoctorDropdown(false)
+        setShowMedicalHistoryClinicDropdown(false)
       }
     }
     
-    // Use capture phase to catch clicks earlier
+    // Use capture phase to catch clicks earlier, before stopPropagation can prevent it
     document.addEventListener('mousedown', handleClickOutside, true)
-    document.addEventListener('click', handleClickOutside, true)
     
     return () => {
       document.removeEventListener('mousedown', handleClickOutside, true)
-      document.removeEventListener('click', handleClickOutside, true)
     }
   }, [])
 
@@ -1058,9 +1198,8 @@ export default function PatientView() {
 
           {currentView === 'dashboard' && (
             <>
-              <div className="page-header">
-                <h1>Home</h1>
-                <p className="subtitle">Welcome back, {userProfile?.fname}!</p>
+              <div className="welcome-header">
+                <h1 className="welcome-message">Welcome back, {userProfile?.fname || 'there'}!</h1>
               </div>
 
               {/* Queue Number Section - Center Stage */}
@@ -1137,15 +1276,13 @@ export default function PatientView() {
                             </p>
                           )}
                         </div>
-                        <div className="appointment-actions">
-                          <button
-                            onClick={() => checkQueuePosition(apt.appointmentId)}
-                            className="btn btn-secondary btn-sm"
-                            disabled={loading}
-                          >
-                            Check Queue Position
-                          </button>
-                        </div>
+                        {queuePosition && selectedAppointment === apt.appointmentId ? (
+                          <div className="appointment-actions">
+                            <div className="queue-status-indicator">
+                              <span className="queue-status-text">In Queue</span>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -1528,35 +1665,150 @@ export default function PatientView() {
             <>
               <div className="page-header">
                 <h1>Medical History</h1>
+                <button
+                  className={`btn ${medicalHistoryFilter === 'archive' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => {
+                    setMedicalHistoryFilter(medicalHistoryFilter === 'archive' ? 'past' : 'archive')
+                    setExpandedAppointmentId(null)
+                  }}
+                >
+                  {medicalHistoryFilter === 'archive' ? 'Show Past Appointments' : 'Show Archive'}
+                </button>
               </div>
 
-              {/* Filter Tabs */}
+              {/* Filters Section */}
               <div className="section-card">
-                <div className="tabs-container">
-                  <button
-                    className={`tab-btn ${medicalHistoryFilter === 'past' ? 'active' : ''}`}
-                    onClick={() => {
-                      setMedicalHistoryFilter('past')
-                      setExpandedAppointmentId(null)
-                    }}
-                  >
-                    Past Appointments
-                  </button>
-                  <button
-                    className={`tab-btn ${medicalHistoryFilter === 'archive' ? 'active' : ''}`}
-                    onClick={() => {
-                      setMedicalHistoryFilter('archive')
-                      setExpandedAppointmentId(null)
-                    }}
-                  >
-                    Archive (Cancelled)
-                  </button>
+                <h2>Search & Filter</h2>
+                <div className="filters-grid filters-grid-3">
+                  <div className="form-group">
+                    <label>Doctor</label>
+                    <div className="searchable-dropdown">
+                      <input
+                        type="text"
+                        placeholder="Search by doctor name"
+                        value={medicalHistoryFilterDoctorSearch}
+                        onChange={(e) => {
+                          setMedicalHistoryFilterDoctorSearch(e.target.value)
+                          setShowMedicalHistoryDoctorDropdown(true)
+                        }}
+                        onFocus={() => setShowMedicalHistoryDoctorDropdown(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="input-sm"
+                      />
+                      {showMedicalHistoryDoctorDropdown && getFilteredDoctorsForHistory().length > 0 && (
+                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                          {getFilteredDoctorsForHistory().map((doctor) => (
+                            <div
+                              key={doctor.id}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMedicalHistoryFilterDoctor(doctor.id.toString())
+                                setMedicalHistoryFilterDoctorSearch(`Dr. ${doctor.fname} ${doctor.lname}`)
+                                setShowMedicalHistoryDoctorDropdown(false)
+                              }}
+                            >
+                              Dr. {doctor.fname} {doctor.lname}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {medicalHistoryFilterDoctor && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMedicalHistoryFilterDoctor('')
+                            setMedicalHistoryFilterDoctorSearch('')
+                          }}
+                          type="button"
+                          aria-label="Clear doctor filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Clinic</label>
+                    <div className="searchable-dropdown">
+                      <input
+                        type="text"
+                        placeholder="Search clinics"
+                        value={medicalHistoryFilterClinicSearch}
+                        onChange={(e) => {
+                          setMedicalHistoryFilterClinicSearch(e.target.value)
+                          setShowMedicalHistoryClinicDropdown(true)
+                        }}
+                        onFocus={() => setShowMedicalHistoryClinicDropdown(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="input-sm"
+                      />
+                      {showMedicalHistoryClinicDropdown && getFilteredClinicsForHistory().length > 0 && (
+                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                          {getFilteredClinicsForHistory().map((clinic) => (
+                            <div
+                              key={clinic.id}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setMedicalHistoryFilterClinic(clinic.id.toString())
+                                setMedicalHistoryFilterClinicSearch(clinic.name)
+                                setShowMedicalHistoryClinicDropdown(false)
+                              }}
+                            >
+                              {clinic.name}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {medicalHistoryFilterClinic && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMedicalHistoryFilterClinic('')
+                            setMedicalHistoryFilterClinicSearch('')
+                          }}
+                          type="button"
+                          aria-label="Clear clinic filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Date</label>
+                    <div className="input-with-clear">
+                      <input
+                        type="date"
+                        value={medicalHistoryFilterDate}
+                        onChange={(e) => setMedicalHistoryFilterDate(e.target.value)}
+                        className="input-sm"
+                      />
+                      {medicalHistoryFilterDate && (
+                        <button
+                          type="button"
+                          className="clear-filter-btn"
+                          onClick={() => setMedicalHistoryFilterDate('')}
+                          title="Clear date filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Past Appointments Tab */}
+
+              {/* Past Appointments */}
               {medicalHistoryFilter === 'past' && (
                 <div className="section-card">
+                  <div className="section-header">
+                    <h2>Past Appointments ({getPastAppointments().length})</h2>
+                  </div>
                   {loading ? (
                     <div className="loading">Loading...</div>
                   ) : getPastAppointments().length === 0 ? (
@@ -1564,72 +1816,55 @@ export default function PatientView() {
                       <p>No past appointments found</p>
                     </div>
                   ) : (
-                    <div className="appointments-list">
-                      {getPastAppointments().map((apt) => {
-                        const isExpanded = expandedAppointmentId === apt.appointmentId
-                        return (
-                          <div key={apt.appointmentId} className="appointment-card-large clickable-appointment">
-                            <div 
-                              className="appointment-main"
-                              onClick={() => setExpandedAppointmentId(isExpanded ? null : apt.appointmentId)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <div className="appointment-header">
-                                <h3>Appointment #{apt.appointmentId}</h3>
-                                <span className="expand-icon">{isExpanded ? '▼' : '▶'}</span>
-                              </div>
-                              <div className="appointment-status-badge">
-                                <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                                  {apt.apptStatus || 'PENDING'}
-                                </span>
-                              </div>
-                              <div className="appointment-details">
-                                <div className="detail-item">
-                                  <span className="detail-label">Date & Time:</span>
-                                  <span className="detail-value">
-                                    {new Date(apt.dateTime).toLocaleString()}
+                    <div className="appointments-table-container">
+                      <table className="appointments-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Date & Time</th>
+                            <th>Clinic</th>
+                            <th>Doctor</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getPastAppointments().map((apt) => {
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            return (
+                              <tr 
+                                key={apt.appointmentId}
+                                className="appointment-row-clickable"
+                                onClick={() => {
+                                  setSelectedAppointmentForSummary(apt)
+                                  setShowTreatmentSummaryModal(true)
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <td>#{apt.appointmentId}</td>
+                                <td>{formattedDate}, {formattedTime}</td>
+                                <td>{clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}</td>
+                                <td>{apt.doctorId ? (doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`) : 'N/A'}</td>
+                                <td>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                    {apt.apptStatus || 'PENDING'}
                                   </span>
-                                </div>
-                                <div className="detail-item">
-                                  <span className="detail-label">Clinic:</span>
-                                  <span className="detail-value">
-                                    {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
-                                  </span>
-                                </div>
-                                {apt.doctorId && (
-                                  <div className="detail-item">
-                                    <span className="detail-label">Doctor:</span>
-                                    <span className="detail-value">
-                                      {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              {isExpanded && apt.treatmentSummary && (
-                                <div className="treatment-summary-section">
-                                  <h4>Treatment Summary</h4>
-                                  <div className="treatment-summary-content">
-                                    {apt.treatmentSummary}
-                                  </div>
-                                </div>
-                              )}
-                              {isExpanded && !apt.treatmentSummary && (
-                                <div className="treatment-summary-section">
-                                  <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Archive (Cancelled) Tab */}
+              {/* Archive (Cancelled) */}
               {medicalHistoryFilter === 'archive' && (
                 <div className="section-card">
+                  <div className="section-header">
+                    <h2>Cancelled Appointments ({getCancelledAppointments().length})</h2>
+                  </div>
                   {loading ? (
                     <div className="loading">Loading...</div>
                   ) : getCancelledAppointments().length === 0 ? (
@@ -1637,45 +1872,112 @@ export default function PatientView() {
                       <p>No cancelled appointments found</p>
                     </div>
                   ) : (
-                    <div className="appointments-list">
-                      {getCancelledAppointments().map((apt) => (
-                        <div key={apt.appointmentId} className="appointment-card-large">
-                          <div className="appointment-main">
-                            <div className="appointment-header">
-                              <h3>Appointment #{apt.appointmentId}</h3>
-                            </div>
-                            <div className="appointment-status-badge">
-                              <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'cancelled'}`}>
-                                {apt.apptStatus || 'CANCELLED'}
-                              </span>
-                            </div>
-                            <div className="appointment-details">
-                              <div className="detail-item">
-                                <span className="detail-label">Date & Time:</span>
-                                <span className="detail-value">
-                                  {new Date(apt.dateTime).toLocaleString()}
-                                </span>
-                              </div>
-                              <div className="detail-item">
-                                <span className="detail-label">Clinic:</span>
-                                <span className="detail-value">
-                                  {clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}
-                                </span>
-                              </div>
-                              {apt.doctorId && (
-                                <div className="detail-item">
-                                  <span className="detail-label">Doctor:</span>
-                                  <span className="detail-value">
-                                    {doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`}
+                    <div className="appointments-table-container">
+                      <table className="appointments-table">
+                        <thead>
+                          <tr>
+                            <th>ID</th>
+                            <th>Date & Time</th>
+                            <th>Clinic</th>
+                            <th>Doctor</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getCancelledAppointments().map((apt) => {
+                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                            return (
+                              <tr key={apt.appointmentId}>
+                                <td>#{apt.appointmentId}</td>
+                                <td>{formattedDate}, {formattedTime}</td>
+                                <td>{clinicNames[apt.clinicId] || `Clinic #${apt.clinicId}`}</td>
+                                <td>{apt.doctorId ? (doctorNames[apt.doctorId] || `Doctor #${apt.doctorId}`) : 'N/A'}</td>
+                                <td>
+                                  <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'cancelled'}`}>
+                                    {apt.apptStatus || 'CANCELLED'}
                                   </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Treatment Summary Modal */}
+              {showTreatmentSummaryModal && selectedAppointmentForSummary && (
+                <div className="modal-overlay" onClick={() => {
+                  setShowTreatmentSummaryModal(false)
+                  setSelectedAppointmentForSummary(null)
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <div>
+                        <h2>Treatment Summary</h2>
+                        <p className="subtitle" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                          Appointment #{selectedAppointmentForSummary.appointmentId}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowTreatmentSummaryModal(false)
+                          setSelectedAppointmentForSummary(null)
+                        }}
+                        className="btn-close"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="treatment-summary-details">
+                        <div className="summary-info-item">
+                          <span className="summary-label">Date & Time:</span>
+                          <span className="summary-value">
+                            {(() => {
+                              const { formattedDate, formattedTime } = formatDateTime(selectedAppointmentForSummary.dateTime)
+                              return `${formattedDate}, ${formattedTime}`
+                            })()}
+                          </span>
+                        </div>
+                        <div className="summary-info-item">
+                          <span className="summary-label">Clinic:</span>
+                          <span className="summary-value">
+                            {clinicNames[selectedAppointmentForSummary.clinicId] || `Clinic #${selectedAppointmentForSummary.clinicId}`}
+                          </span>
+                        </div>
+                        {selectedAppointmentForSummary.doctorId && (
+                          <div className="summary-info-item">
+                            <span className="summary-label">Doctor:</span>
+                            <span className="summary-value">
+                              {doctorNames[selectedAppointmentForSummary.doctorId] || `Doctor #${selectedAppointmentForSummary.doctorId}`}
+                            </span>
+                          </div>
+                        )}
+                        <div className="summary-info-item">
+                          <span className="summary-label">Status:</span>
+                          <span className={`status-badge status-${selectedAppointmentForSummary.apptStatus?.toLowerCase() || 'pending'}`}>
+                            {selectedAppointmentForSummary.apptStatus || 'PENDING'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {selectedAppointmentForSummary.treatmentSummary ? (
+                        <div className="treatment-summary-section" style={{ marginTop: '1.5rem' }}>
+                          <h4>Treatment Summary</h4>
+                          <div className="treatment-summary-content">
+                            {selectedAppointmentForSummary.treatmentSummary}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="treatment-summary-section" style={{ marginTop: '1.5rem' }}>
+                          <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>

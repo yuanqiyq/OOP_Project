@@ -40,7 +40,63 @@
 
 /* Page Header */
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 1rem;
+  width: 100%;
+}
+
+.page-header h1 {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  margin-right: 0 !important;
+  text-align: left !important;
+  width: auto !important;
+  max-width: none !important;
+  color: var(--teal-dark);
+  font-size: 2rem;
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 4px var(--teal-glow));
+}
+
+.page-header > .btn,
+.page-header button.btn {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  margin-left: auto !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+/* Ensure desktop layout above 768px */
+@media (min-width: 769px) {
+  .page-header {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+  }
+  
+  .page-header h1 {
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+  
+  .page-header > .btn,
+  .page-header button.btn {
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+}
+
+.page-header-compact {
+  margin-bottom: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -48,16 +104,21 @@
   gap: 1rem;
 }
 
-.page-header h1 {
+.welcome-header {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.welcome-message {
   color: var(--teal-dark);
-  font-size: 2.5rem;
-  font-weight: 700;
+  font-size: 1.75rem;
+  font-weight: 600;
   margin: 0;
   background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 2px 4px var(--teal-glow));
 }
 
 .subtitle {
@@ -141,9 +202,9 @@
 .section-card {
   background: var(--gradient-card);
   border-radius: 20px;
-  padding: 2rem;
+  padding: 1.5rem;
   border: 1px solid rgba(78, 205, 196, 0.15);
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   box-shadow: 0 4px 24px rgba(78, 205, 196, 0.08);
   transition: all 0.3s;
 }
@@ -169,7 +230,7 @@
 
 /* Queue Display Section - Center Stage */
 .queue-display-section {
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
   display: flex;
   justify-content: center;
 }
@@ -177,7 +238,7 @@
 .queue-display-card {
   background: var(--gradient-card);
   border-radius: 24px;
-  padding: 3rem 4rem;
+  padding: 2rem 3rem;
   border: 2px solid rgba(78, 205, 196, 0.2);
   box-shadow: 0 12px 48px rgba(78, 205, 196, 0.15);
   position: relative;
@@ -209,8 +270,8 @@
 
 .queue-section-title {
   color: var(--teal-dark);
-  margin: 0 0 2rem 0;
-  font-size: 1.75rem;
+  margin: 0 0 1.5rem 0;
+  font-size: 1.5rem;
   font-weight: 600;
   text-align: center;
   position: relative;
@@ -547,6 +608,23 @@
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.queue-status-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  background: var(--gradient-primary);
+  color: #ffffff;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  width: 100%;
+}
+
+.queue-status-text {
+  color: #ffffff;
 }
 
 .appointment-actions-vertical {
@@ -991,6 +1069,23 @@ select.input-sm:focus {
   margin-bottom: 0;
 }
 
+.filters-grid-3 {
+  display: flex !important;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Override grid display when both classes are present */
+.filters-grid.filters-grid-3 {
+  display: flex !important;
+  grid-template-columns: none !important;
+  grid-template-rows: none !important;
+  grid-auto-flow: unset !important;
+}
+
 .filters-grid .form-group {
   margin: 0;
   padding: 0;
@@ -999,6 +1094,27 @@ select.input-sm:focus {
   flex-direction: column;
   gap: 0.5rem;
   width: 100%;
+}
+
+/* More specific selector for filters-grid-3 to override filters-grid rules */
+.filters-grid.filters-grid-3 .form-group {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0.25rem !important;
+}
+
+.filters-grid.filters-grid-3 .form-group input {
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+.filters-grid.filters-grid-3 .form-group label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
 }
 
 .filters-grid .form-group label {
@@ -1015,12 +1131,50 @@ select.input-sm:focus {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.75rem;
   }
+  
+  .filters-grid-3 {
+    flex-wrap: wrap;
+  }
+  
+  .filters-grid.filters-grid-3 .form-group {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
 }
 
 @media (max-width: 768px) {
   .filters-grid {
     grid-template-columns: 1fr;
     gap: 0.75rem;
+  }
+  
+  .page-header {
+    flex-wrap: wrap !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  .page-header h1 {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+  
+  .page-header > .btn,
+  .page-header button.btn {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+  }
+  
+  .filters-grid-3 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .filters-grid.filters-grid-3 .form-group {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
   }
 }
 
@@ -1651,6 +1805,53 @@ select.input-sm:focus {
   flex: 1;
 }
 
+/* Appointments Table */
+.appointments-table-container {
+  overflow-x: auto;
+}
+
+.appointments-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(78, 205, 196, 0.08);
+}
+
+.appointments-table thead {
+  background: var(--gradient-primary);
+}
+
+.appointments-table th {
+  color: #ffffff;
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.appointments-table td {
+  color: #2d2d2d;
+  padding: 1rem;
+  border-top: 1px solid rgba(78, 205, 196, 0.1);
+}
+
+.appointments-table tbody tr:hover {
+  background: var(--gradient-glow);
+}
+
+.appointment-row-clickable {
+  transition: all 0.2s;
+}
+
+.appointment-row-clickable:hover {
+  background: var(--gradient-glow) !important;
+  transform: translateX(2px);
+  box-shadow: inset 4px 0 0 var(--teal-primary);
+}
+
 /* Treatment Summary */
 .treatment-summary-section {
   margin-top: 1.5rem;
@@ -1678,12 +1879,13 @@ select.input-sm:focus {
 }
 
 .treatment-summary-content {
-  background: var(--gradient-glow);
-  padding: 1rem 1.5rem;
-  border-radius: 10px;
-  border: 1px solid rgba(78, 205, 196, 0.2);
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 1rem;
   color: #2d2d2d;
+  font-size: 0.95rem;
   line-height: 1.6;
+  border: 1px solid rgba(78, 205, 196, 0.1);
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -1696,6 +1898,52 @@ select.input-sm:focus {
   background: var(--gradient-glow);
   border-radius: 10px;
   border: 1px dashed rgba(78, 205, 196, 0.2);
+}
+
+/* Treatment Summary Details */
+.treatment-summary-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  border: 1px solid rgba(78, 205, 196, 0.15);
+}
+
+.summary-info-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.summary-label {
+  font-weight: 600;
+  color: var(--teal-dark);
+  min-width: 120px;
+  font-size: 0.95rem;
+}
+
+.summary-value {
+  color: #2d2d2d;
+  font-size: 0.95rem;
+  flex: 1;
+}
+
+.btn-close {
+  background: transparent;
+  border: none;
+  color: #666;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.btn-close:hover {
+  color: var(--teal-primary);
+  background: var(--gradient-glow);
 }
 
 @media (max-width: 768px) {
@@ -1712,8 +1960,20 @@ select.input-sm:focus {
   }
 
   .page-header {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-wrap: wrap !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  
+  .page-header h1 {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+  
+  .page-header .btn,
+  .page-header button.btn {
+    flex: 0 0 auto !important;
+    width: 100% !important;
   }
 
   .header-actions {
