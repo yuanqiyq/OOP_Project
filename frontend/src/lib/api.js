@@ -126,6 +126,9 @@ export const queueAPI = {
   getAppointmentHistory: (appointmentId) => apiCall(`/queue/appointment/${appointmentId}`),
   getCurrentlyServing: (clinicId) => apiCall(`/queue/clinic/${clinicId}/currently-serving`),
   getMissed: (clinicId) => apiCall(`/queue/clinic/${clinicId}/missed`),
+  callNext: (clinicId) => apiCall(`/queue/clinic/${clinicId}/call-next`, { method: 'POST' }),
+  callByAppointmentId: (appointmentId) => apiCall(`/queue/call-appointment/${appointmentId}`, { method: 'POST' }),
+  markAppointmentDone: (appointmentId) => apiCall(`/queue/appointment/${appointmentId}/done`, { method: 'POST' }),
 }
 
 // Clinic API

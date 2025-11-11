@@ -180,6 +180,42 @@ public class QueueService {
     }
 
     /**
+     * Mark queue entry as DONE by appointment ID
+     * Finds active queue entry (IN_QUEUE or CALLED) and marks it as DONE
+     * Used when completing an appointment
+     *
+     * @param appointmentId ID of the appointment
+     * @return Updated QueueLog entry
+     * @throws QueueException if no active queue entry found
+     */
+    @Transactional
+    public QueueLog markAppointmentDone(Long appointmentId) {
+        // Find active queue entry (IN_QUEUE or CALLED)
+        Optional<QueueLog> inQueueEntry = queueRepository.findByAppointmentIdAndStatus(
+                appointmentId, QueueLog.STATUS_IN_QUEUE);
+        Optional<QueueLog> calledEntry = queueRepository.findByAppointmentIdAndStatus(
+                appointmentId, QueueLog.STATUS_CALLED);
+
+        QueueLog queueEntry = inQueueEntry.orElse(calledEntry.orElse(null));
+
+        if (queueEntry == null) {
+            // No active queue entry found - this is okay, appointment might not be in queue
+            log.info("No active queue entry found for appointment {}, skipping queue status update", appointmentId);
+            return null;
+        }
+
+        // Update to DONE
+        queueEntry.setStatus(QueueLog.STATUS_DONE);
+        QueueLog saved = queueRepository.save(queueEntry);
+
+        // Notify SSE listeners that queue changed
+        eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
+
+        log.info("Marked queue entry {} (appointment {}) as DONE", saved.getQueueId(), appointmentId);
+        return saved;
+    }
+
+    /**
      * Update the status of a queue entry
      * Valid transitions:
      * - IN_QUEUE → CALLED (staff explicitly calls patient)
@@ -208,7 +244,7 @@ public class QueueService {
         if (!QueueLog.isValidTransition(queueEntry.getStatus(), newStatus)) {
             throw new QueueException(
                     "Invalid status transition from " + queueEntry.getStatus() +
-                            " to " + newStatus + ". Can only transition from IN_QUEUE to DONE or MISSED");
+                            " to " + newStatus + ". Valid transitions: IN_QUEUE→CALLED/MISSED, CALLED→DONE/MISSED");
         }
 
         // Get queue position before status change (for "your turn" notification)

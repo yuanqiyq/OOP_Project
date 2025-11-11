@@ -198,6 +198,36 @@ public class QueueController {
     }
 
     /**
+     * Mark appointment queue entry as DONE
+     * Finds active queue entry (IN_QUEUE or CALLED) for the appointment and marks it as DONE
+     * Used when completing an appointment
+     *
+     * @param appointmentId ID of the appointment
+     * @return ResponseEntity with updated QueueLog or success message
+     *
+     * POST /api/queue/appointment/{appointmentId}/done
+     */
+    @PostMapping("/appointment/{appointmentId}/done")
+    public ResponseEntity<?> markAppointmentDone(@PathVariable Long appointmentId) {
+        try {
+            QueueLog updatedEntry = queueService.markAppointmentDone(appointmentId);
+            
+            if (updatedEntry == null) {
+                // No active queue entry found - this is okay
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "No active queue entry found for appointment " + appointmentId);
+                return ResponseEntity.ok(response);
+            }
+            
+            return ResponseEntity.ok(updatedEntry);
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ErrorResponse(500, "Internal Server Error", e.getMessage()));
+        }
+    }
+
+    /**
      * Re-queue a missed patient
      * Creates a new IN_QUEUE entry while keeping original MISSED entry for audit
      *

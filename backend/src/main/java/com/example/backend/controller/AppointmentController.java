@@ -97,14 +97,31 @@ public class AppointmentController {
 
     // PUT /api/appointments/{id} - Update appointment
     @PutMapping("/{id}")
-    public ResponseEntity<Appointment> updateAppointment(@PathVariable Long id,
+    public ResponseEntity<?> updateAppointment(@PathVariable Long id,
             @RequestBody AppointmentUpdateDTO updateDTO) {
         try {
             return appointmentService.updateAppointment(id, updateDTO)
                     .map(updatedAppointment -> ResponseEntity.ok(updatedAppointment))
                     .orElse(ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException e) {
+            // Handle enum deserialization errors
+            ErrorResponse errorResponse = new ErrorResponse(
+                    400,
+                    "Bad Request",
+                    e.getMessage(),
+                    "/api/appointments/" + id);
+            return ResponseEntity.badRequest().body(errorResponse);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+            // Log the error for debugging
+            System.err.println("Error updating appointment: " + e.getClass().getName() + " - " + e.getMessage());
+            e.printStackTrace();
+            
+            ErrorResponse errorResponse = new ErrorResponse(
+                    500,
+                    "Internal Server Error",
+                    "An unexpected error occurred: " + e.getMessage(),
+                    "/api/appointments/" + id);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 

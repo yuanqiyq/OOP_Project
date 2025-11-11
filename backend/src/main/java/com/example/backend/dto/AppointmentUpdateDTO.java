@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import com.example.backend.model.appointments.AppointmentStatus;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -59,8 +60,9 @@ public class AppointmentUpdateDTO {
 
     /**
      * Appointment status
-     * Valid values: SCHEDULED, ARRIVED, NO_SHOW, CANCELLED
+     * Valid values: SCHEDULED, ARRIVED, NO_SHOW, CANCELLED, COMPLETED
      */
+    @JsonDeserialize(using = AppointmentStatusDeserializer.class)
     private AppointmentStatus apptStatus;
 
     /**

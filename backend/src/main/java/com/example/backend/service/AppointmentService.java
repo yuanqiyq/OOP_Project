@@ -160,6 +160,7 @@ public class AppointmentService {
                         existingAppointment.setApptStatus(updateDTO.getApptStatus());
                     }
                     if (updateDTO.getTreatmentSummary() != null) {
+                        // Allow empty strings to clear treatment summary, or set new value
                         existingAppointment.setTreatmentSummary(updateDTO.getTreatmentSummary());
                     }
 

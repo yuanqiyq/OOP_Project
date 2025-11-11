@@ -23,6 +23,17 @@ export default function StaffView() {
   const [queueHistory, setQueueHistory] = useState(null)
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(null)
   
+  // Treatment summary modal state
+  const [showTreatmentModal, setShowTreatmentModal] = useState(false)
+  const [selectedAppointmentForTreatment, setSelectedAppointmentForTreatment] = useState(null)
+  const [selectedQueueIdForTreatment, setSelectedQueueIdForTreatment] = useState(null)
+  const [treatmentSummaryText, setTreatmentSummaryText] = useState('')
+  
+  // Priority selection modal state for check-in
+  const [showPriorityModal, setShowPriorityModal] = useState(false)
+  const [selectedAppointmentForCheckIn, setSelectedAppointmentForCheckIn] = useState(null)
+  const [checkInPriority, setCheckInPriority] = useState(1)
+  
   // Doctor management state
   const [showAddDoctorModal, setShowAddDoctorModal] = useState(false)
   const [showEditDoctorModal, setShowEditDoctorModal] = useState(false)
@@ -38,7 +49,7 @@ export default function StaffView() {
 
   useEffect(() => {
     if (clinicId) {
-      fetchQueue()
+      fetchQueue(true) // Show errors on initial load
       fetchCurrentlyServing()
       fetchMissed()
       fetchAppointments()
@@ -51,7 +62,7 @@ export default function StaffView() {
   useEffect(() => {
     if (autoRefresh && clinicId && location.pathname.includes('/staff') && !location.pathname.includes('/settings')) {
       const interval = setInterval(() => {
-        fetchQueue()
+        fetchQueue(false) // Don't show errors for auto-refresh
         fetchCurrentlyServing()
       }, 5000)
       return () => clearInterval(interval)
@@ -91,14 +102,20 @@ export default function StaffView() {
     }
   }
 
-  const fetchQueue = async () => {
+  const fetchQueue = async (showError = false) => {
     try {
       const data = await queueAPI.getClinicQueue(clinicId)
       setQueue(data.queue || [])
-      setError('')
+      if (showError) {
+        setError('')
+      }
     } catch (err) {
-      setError('Failed to load queue')
-      console.error(err)
+      console.error('Failed to load queue:', err)
+      // Only show error if explicitly requested (user-initiated refresh)
+      if (showError) {
+        setError('Failed to load queue')
+        setTimeout(() => setError(''), 5000)
+      }
     }
   }
 
@@ -107,7 +124,8 @@ export default function StaffView() {
       const data = await queueAPI.getCurrentlyServing(clinicId)
       setCurrentServing(data)
     } catch (err) {
-      console.error('Failed to fetch currently serving', err)
+      console.error('Failed to fetch currently serving:', err)
+      // Don't show error for auto-refresh failures, just log them
     }
   }
 
@@ -160,11 +178,73 @@ export default function StaffView() {
       setError('')
       setSuccess(`Queue entry marked as ${status}`)
       setTimeout(() => setSuccess(''), 3000)
-      await fetchQueue()
+      await fetchQueue(false)
       await fetchCurrentlyServing()
       await fetchMissed()
     } catch (err) {
       setError(err.message || 'Failed to update queue status')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openTreatmentModal = (appointmentId, queueId) => {
+    setSelectedAppointmentForTreatment(appointmentId)
+    setSelectedQueueIdForTreatment(queueId)
+    setTreatmentSummaryText('')
+    setShowTreatmentModal(true)
+  }
+
+  const completeAppointmentWithTreatment = async () => {
+    if (!selectedAppointmentForTreatment) return
+
+    try {
+      setLoading(true)
+      
+      // Prepare update payload
+      // Try both formats - Jackson should handle either with @JsonCreator
+      const updatePayload = {
+        apptStatus: 'COMPLETED'  // Using enum name format
+      }
+      
+      // Only include treatmentSummary if it's not empty
+      const trimmedSummary = treatmentSummaryText.trim()
+      if (trimmedSummary) {
+        updatePayload.treatmentSummary = trimmedSummary
+      }
+      
+      // Update appointment with treatment summary and mark as COMPLETED
+      await appointmentAPI.update(selectedAppointmentForTreatment, updatePayload)
+      
+      // Mark queue entry as DONE (finds active queue entry by appointmentId)
+      // This will remove the patient from the queue regardless of their current status (IN_QUEUE or CALLED)
+      try {
+        await queueAPI.markAppointmentDone(selectedAppointmentForTreatment)
+      } catch (err) {
+        // Log but don't fail - appointment might not be in queue
+        console.warn('Could not update queue status:', err)
+      }
+      
+      // Close modal and reset state first
+      setShowTreatmentModal(false)
+      setSelectedAppointmentForTreatment(null)
+      setSelectedQueueIdForTreatment(null)
+      setTreatmentSummaryText('')
+      
+      // Show success toast
+      setError('')
+      setSuccess('Appointment done!')
+      setTimeout(() => setSuccess(''), 3000)
+      
+      // Refresh data to remove from queue and update display
+      await fetchQueue(false)
+      await fetchCurrentlyServing()
+      await fetchMissed()
+      await fetchAppointments()
+    } catch (err) {
+      console.error('Error completing appointment:', err)
+      setError(err.message || 'Failed to complete appointment')
       setTimeout(() => setError(''), 5000)
     } finally {
       setLoading(false)
@@ -178,7 +258,7 @@ export default function StaffView() {
       setError('')
       setSuccess('Patient re-queued successfully')
       setTimeout(() => setSuccess(''), 3000)
-      await fetchQueue()
+      await fetchQueue(false)
       await fetchMissed()
     } catch (err) {
       setError(err.message || 'Failed to requeue patient')
@@ -204,17 +284,67 @@ export default function StaffView() {
     }
   }
 
-  const checkInPatient = async (appointmentId, priority = 1) => {
+  const openCheckInModal = (appointmentId) => {
+    setSelectedAppointmentForCheckIn(appointmentId)
+    setCheckInPriority(1) // Default to normal priority
+    setShowPriorityModal(true)
+  }
+
+  const checkInPatient = async () => {
+    if (!selectedAppointmentForCheckIn) return
+    
     try {
       setLoading(true)
-      await queueAPI.checkIn(appointmentId, priority)
+      await queueAPI.checkIn(selectedAppointmentForCheckIn, checkInPriority)
+      
+      // Close modal and reset state
+      setShowPriorityModal(false)
+      setSelectedAppointmentForCheckIn(null)
+      setCheckInPriority(1)
+      
       setError('')
       setSuccess('Patient checked in to queue successfully!')
       setTimeout(() => setSuccess(''), 3000)
-      await fetchQueue()
+      await fetchQueue(false)
       await fetchAppointments()
     } catch (err) {
       setError(err.message || 'Failed to check in patient')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const callNextPatient = async () => {
+    if (!clinicId) return
+    
+    try {
+      setLoading(true)
+      await queueAPI.callNext(clinicId)
+      setError('')
+      setSuccess('Next patient called successfully!')
+      setTimeout(() => setSuccess(''), 3000)
+      await fetchQueue(false)
+      await fetchCurrentlyServing()
+    } catch (err) {
+      setError(err.message || 'Failed to call next patient')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const callPatientByAppointmentId = async (appointmentId) => {
+    try {
+      setLoading(true)
+      await queueAPI.callByAppointmentId(appointmentId)
+      setError('')
+      setSuccess('Patient called successfully!')
+      setTimeout(() => setSuccess(''), 3000)
+      await fetchQueue(false)
+      await fetchCurrentlyServing()
+    } catch (err) {
+      setError(err.message || 'Failed to call patient')
       setTimeout(() => setError(''), 5000)
     } finally {
       setLoading(false)
@@ -355,7 +485,7 @@ export default function StaffView() {
                     />
                     <span>Auto Refresh</span>
                   </label>
-                  <button onClick={fetchQueue} className="btn btn-secondary">
+                  <button onClick={() => fetchQueue(true)} className="btn btn-secondary">
                     🔄 Refresh
                   </button>
                 </div>
@@ -368,6 +498,16 @@ export default function StaffView() {
                   <div className="empty-state-large">
                     <div className="empty-icon">📭</div>
                     <p>No patient currently being served</p>
+                    {queue.length > 0 && (
+                      <button
+                        onClick={callNextPatient}
+                        className="btn btn-primary btn-large"
+                        disabled={loading}
+                        style={{ marginTop: '1rem' }}
+                      >
+                        📞 Call Next Patient
+                      </button>
+                    )}
                   </div>
                 ) : currentServing?.appointmentId ? (
                   <div className="serving-display">
@@ -377,12 +517,22 @@ export default function StaffView() {
                     </div>
                     <div className="serving-actions">
                       <button
-                        onClick={() => updateQueueStatus(currentServing.queueId, 'DONE')}
+                        onClick={() => openTreatmentModal(currentServing.appointmentId, currentServing.queueId)}
                         className="btn btn-success btn-large"
                         disabled={loading}
                       >
                         ✓ Mark as Done
                       </button>
+                      {queue.length > 0 && (
+                        <button
+                          onClick={callNextPatient}
+                          className="btn btn-primary btn-large"
+                          disabled={loading}
+                          style={{ marginLeft: '0.5rem' }}
+                        >
+                          📞 Call Next
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -438,9 +588,17 @@ export default function StaffView() {
                           </div>
                         </div>
                         <div className="queue-actions-enhanced">
+                          <button
+                            onClick={() => callPatientByAppointmentId(entry.appointmentId)}
+                            className="btn btn-primary"
+                            disabled={loading}
+                            title="Call this patient now"
+                          >
+                            📞 Call
+                          </button>
                           {index === 0 && (
                             <button
-                              onClick={() => updateQueueStatus(entry.queueId, 'DONE')}
+                              onClick={() => openTreatmentModal(entry.appointmentId, entry.queueId)}
                               className="btn btn-success"
                               disabled={loading}
                             >
@@ -500,6 +658,164 @@ export default function StaffView() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Treatment Summary Modal */}
+              {showTreatmentModal && selectedAppointmentForTreatment && (
+                <div className="modal-overlay" onClick={() => {
+                  if (!loading) {
+                    setShowTreatmentModal(false)
+                    setSelectedAppointmentForTreatment(null)
+                    setSelectedQueueIdForTreatment(null)
+                    setTreatmentSummaryText('')
+                  }
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Complete Appointment #{selectedAppointmentForTreatment}</h2>
+                      <button
+                        onClick={() => {
+                          if (!loading) {
+                            setShowTreatmentModal(false)
+                            setSelectedAppointmentForTreatment(null)
+                            setSelectedQueueIdForTreatment(null)
+                            setTreatmentSummaryText('')
+                          }
+                        }}
+                        className="btn-close"
+                        disabled={loading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Treatment Summary</label>
+                        <textarea
+                          value={treatmentSummaryText}
+                          onChange={(e) => setTreatmentSummaryText(e.target.value)}
+                          className="input-sm"
+                          placeholder="Enter a short treatment summary (optional)"
+                          rows={6}
+                          disabled={loading}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            border: '2px solid rgba(78, 205, 196, 0.2)',
+                            borderRadius: '10px',
+                            fontSize: '0.95rem',
+                            fontFamily: 'inherit',
+                            resize: 'vertical',
+                            minHeight: '120px'
+                          }}
+                        />
+                        <p className="form-hint" style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+                          Write a brief summary of the treatment provided. This will be saved with the appointment record.
+                        </p>
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          onClick={completeAppointmentWithTreatment}
+                          className="btn btn-primary"
+                          disabled={loading}
+                        >
+                          {loading ? 'Completing...' : '✓ Complete Appointment'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loading) {
+                              setShowTreatmentModal(false)
+                              setSelectedAppointmentForTreatment(null)
+                              setSelectedQueueIdForTreatment(null)
+                              setTreatmentSummaryText('')
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Priority Selection Modal for Check-In */}
+              {showPriorityModal && selectedAppointmentForCheckIn && (
+                <div className="modal-overlay" onClick={() => {
+                  if (!loading) {
+                    setShowPriorityModal(false)
+                    setSelectedAppointmentForCheckIn(null)
+                    setCheckInPriority(1)
+                  }
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Check In Patient - Appointment #{selectedAppointmentForCheckIn}</h2>
+                      <button
+                        onClick={() => {
+                          if (!loading) {
+                            setShowPriorityModal(false)
+                            setSelectedAppointmentForCheckIn(null)
+                            setCheckInPriority(1)
+                          }
+                        }}
+                        className="btn-close"
+                        disabled={loading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Priority Level</label>
+                        <select
+                          value={checkInPriority}
+                          onChange={(e) => setCheckInPriority(parseInt(e.target.value))}
+                          className="select-input"
+                          disabled={loading}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            border: '2px solid rgba(78, 205, 196, 0.2)',
+                            borderRadius: '10px',
+                            fontSize: '0.95rem',
+                            fontFamily: 'inherit'
+                          }}
+                        >
+                          <option value={1}>Normal Priority</option>
+                          <option value={2}>High Priority</option>
+                        </select>
+                        <p className="form-hint" style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+                          High priority patients will be placed ahead of normal priority patients in the queue.
+                        </p>
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          onClick={checkInPatient}
+                          className="btn btn-primary"
+                          disabled={loading}
+                        >
+                          {loading ? 'Checking In...' : '✓ Check In'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loading) {
+                              setShowPriorityModal(false)
+                              setSelectedAppointmentForCheckIn(null)
+                              setCheckInPriority(1)
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -665,7 +981,7 @@ export default function StaffView() {
                             <td>
                               <div className="action-buttons-small">
                                 <button
-                                  onClick={() => checkInPatient(apt.appointmentId)}
+                                  onClick={() => openCheckInModal(apt.appointmentId)}
                                   className="btn btn-primary btn-sm"
                                   disabled={loading || apt.apptStatus === 'COMPLETED'}
                                   title="Check in patient to queue"
