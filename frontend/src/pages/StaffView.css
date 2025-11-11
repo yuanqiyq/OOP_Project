@@ -180,6 +180,7 @@
   height: 200%;
   background: radial-gradient(circle, rgba(78, 205, 196, 0.08) 0%, transparent 70%);
   animation: pulse-glow 3s ease-in-out infinite;
+  pointer-events: none;
 }
 
 @keyframes pulse-glow {
@@ -216,6 +217,15 @@
   color: var(--teal-primary);
   text-shadow: 0 4px 12px var(--teal-glow);
   filter: drop-shadow(0 4px 8px rgba(78, 205, 196, 0.3));
+}
+
+.serving-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 2;
 }
 
 .empty-state-large {
@@ -357,6 +367,12 @@
   border: 1px solid #ffb74d;
 }
 
+.priority-3 {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  color: #c62828;
+  border: 1px solid #ef5350;
+}
+
 .queue-info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -386,6 +402,153 @@
   flex-direction: column;
   gap: 0.5rem;
   min-width: 120px;
+}
+
+/* Appointments Waiting to Check In */
+.waiting-checkin-card {
+  border: 2px solid rgba(78, 205, 196, 0.25);
+  background: var(--gradient-card);
+  box-shadow: 0 4px 24px rgba(78, 205, 196, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.waiting-checkin-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+  opacity: 0.6;
+}
+
+.waiting-checkin-badge {
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.15) 0%, rgba(78, 205, 196, 0.1) 100%);
+  color: var(--teal-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(78, 205, 196, 0.3);
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.15);
+}
+
+.waiting-checkin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.waiting-checkin-item {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  border: 2px solid rgba(78, 205, 196, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(78, 205, 196, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.waiting-checkin-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--gradient-primary);
+  transform: scaleY(0);
+  transition: transform 0.3s;
+}
+
+.waiting-checkin-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(78, 205, 196, 0.2);
+  border-color: rgba(78, 205, 196, 0.4);
+}
+
+.waiting-checkin-item:hover::before {
+  transform: scaleY(1);
+}
+
+.waiting-checkin-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.waiting-checkin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.waiting-checkin-header h3 {
+  color: var(--teal-dark);
+  font-size: 1.15rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.appointment-time-badge {
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.1) 0%, rgba(78, 205, 196, 0.05) 100%);
+  color: var(--teal-primary);
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(78, 205, 196, 0.25);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.waiting-checkin-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.detail-label {
+  color: #666;
+  font-weight: 500;
+  min-width: 70px;
+}
+
+.detail-value {
+  color: var(--teal-primary);
+  font-weight: 600;
+}
+
+.waiting-checkin-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.waiting-checkin-actions .btn {
+  min-width: 120px;
+  white-space: nowrap;
 }
 
 /* Missed Patients */
@@ -449,6 +612,26 @@
   z-index: 1000;
   padding: 2rem;
   backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+/* Debug: Show which modal is open (remove in production) */
+.modal-overlay {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Ensure body doesn't scroll when modal is open */
+body.modal-open {
+  overflow: hidden;
 }
 
 .modal-content {
@@ -989,6 +1172,21 @@
 
 /* Responsive */
 @media (max-width: 1024px) {
+  .waiting-checkin-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .waiting-checkin-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .waiting-checkin-actions .btn {
+    flex: 1;
+    min-width: auto;
+  }
+
   .queue-item-enhanced {
     flex-direction: column;
     align-items: stretch;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { appointmentAPI, queueAPI, adminAPI, clinicAPI, doctorAPI } from '../lib/api'
 import Navbar from '../components/Navbar'
@@ -76,6 +76,8 @@ export default function PatientView() {
   const [filterDoctorSearch, setFilterDoctorSearch] = useState('')
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false)
   const [filterClinic, setFilterClinic] = useState('')
+  const [filterClinicSearch, setFilterClinicSearch] = useState('')
+  const [showClinicDropdown, setShowClinicDropdown] = useState(false)
   const [filterRegion, setFilterRegion] = useState('')
   const [filterRegionSearch, setFilterRegionSearch] = useState('')
   const [showRegionDropdown, setShowRegionDropdown] = useState(false)
@@ -102,7 +104,9 @@ export default function PatientView() {
     if (patientId && !authLoading) {
       fetchAppointments()
     }
-  }, [userProfile, authLoading])
+    // Only run when patientId or authLoading changes, not on every userProfile change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile?.userId, userProfile?.patientId, authLoading])
 
   // Update clinic and doctor name mappings when data is loaded
   useEffect(() => {
@@ -125,6 +129,13 @@ export default function PatientView() {
     }
   }, [doctors])
 
+  // Track if we've already checked queue position to prevent infinite loops
+  const [hasCheckedQueue, setHasCheckedQueue] = useState(false)
+  const [isCheckingQueue, setIsCheckingQueue] = useState(false)
+
+  // Track last checked appointment IDs to avoid re-checking unnecessarily
+  const lastCheckedIdsRef = useRef('')
+
   // Auto-check queue position for upcoming appointments
   useEffect(() => {
     const isDashboard = !location.pathname.includes('/appointments') && 
@@ -132,22 +143,69 @@ export default function PatientView() {
                         !location.pathname.includes('/settings') &&
                         !location.pathname.includes('/book')
     
-    if (isDashboard && appointments.length > 0 && !selectedAppointment) {
-      // Find the first upcoming appointment that's not cancelled
+    // Reset when navigating away from dashboard
+    if (!isDashboard) {
+      setHasCheckedQueue(false)
+      setIsCheckingQueue(false)
+      setQueuePosition(null)
+      setSelectedAppointment(null)
+      lastCheckedIdsRef.current = ''
+      return
+    }
+    
+    // Prevent concurrent queue checks
+    if (isCheckingQueue) {
+      return
+    }
+    
+    // Check if appointments have changed (by comparing appointment IDs)
+    const currentAppointmentIds = appointments.map(apt => apt.appointmentId).sort().join(',')
+    const appointmentsChanged = currentAppointmentIds !== lastCheckedIdsRef.current
+    
+    // Only check if appointments have changed or we haven't checked yet
+    if (!appointmentsChanged && hasCheckedQueue) {
+      return
+    }
+    
+    // Check queue position for all upcoming appointments
+    if (isDashboard && appointments.length > 0) {
       const upcomingAppts = getFilteredAppointments()
       if (upcomingAppts.length > 0) {
-        const upcomingAppt = upcomingAppts[0]
-        // Auto-check queue position for the first upcoming appointment
-        checkQueuePosition(upcomingAppt.appointmentId).catch(err => {
-          // Silently fail if not in queue - this is expected for appointments not checked in
-          if (!err.message?.includes('404') && !err.message?.includes('Not Found')) {
-            console.error('Error checking queue position:', err)
+        setHasCheckedQueue(true)
+        setIsCheckingQueue(true)
+        lastCheckedIdsRef.current = currentAppointmentIds
+        
+        // Check queue position for each upcoming appointment (in order)
+        // Stop at the first one that's in queue
+        const checkAppointments = async () => {
+          for (const apt of upcomingAppts) {
+            try {
+              const position = await queueAPI.getQueuePosition(apt.appointmentId)
+              if (position) {
+                setQueuePosition(position)
+                setSelectedAppointment(apt.appointmentId)
+                setIsCheckingQueue(false)
+                return // Found one in queue, stop checking
+              }
+            } catch (err) {
+              // Not in queue, continue to next appointment
+              if (!err.message?.includes('404') && !err.message?.includes('Not Found') && !err.message?.includes('Not in queue')) {
+                console.error('Error checking queue position for appointment', apt.appointmentId, err)
+              }
+            }
           }
-        })
+          setIsCheckingQueue(false)
+        }
+        
+        checkAppointments()
+      } else {
+        // No upcoming appointments, clear queue position
+        setQueuePosition(null)
+        setSelectedAppointment(null)
+        lastCheckedIdsRef.current = ''
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointments, location, selectedAppointment])
+  }, [appointments, location.pathname]) // Check when appointments change or location changes
 
   useEffect(() => {
     // Use SSE for real-time queue position updates (on dashboard)
@@ -192,8 +250,18 @@ export default function PatientView() {
     }
   }, [selectedAppointment, location])
 
+  // Track if fetchAppointments is already running to prevent concurrent calls
+  const [isFetchingAppointments, setIsFetchingAppointments] = useState(false)
+
   const fetchAppointments = async () => {
+    // Prevent concurrent calls
+    if (isFetchingAppointments) {
+      console.log('fetchAppointments already in progress, skipping...')
+      return
+    }
+
     try {
+      setIsFetchingAppointments(true)
       setLoading(true)
       // Use userId or patientId (Patient model might use either)
       const patientId = userProfile?.userId || userProfile?.patientId
@@ -227,22 +295,35 @@ export default function PatientView() {
       console.error(err)
     } finally {
       setLoading(false)
+      setIsFetchingAppointments(false)
     }
   }
 
   const checkQueuePosition = async (appointmentId) => {
     try {
+      setLoading(true)
       const position = await queueAPI.getQueuePosition(appointmentId)
-      setQueuePosition(position)
-      setSelectedAppointment(appointmentId)
-      setError('')
-    } catch (err) {
-      if (err.message.includes('404') || err.message.includes('Not Found')) {
+      if (position) {
+        setQueuePosition(position)
+        setSelectedAppointment(appointmentId)
+        setError('')
+        showToast('Queue position updated!', 'success')
+      } else {
         setQueuePosition(null)
+        setSelectedAppointment(null)
+      }
+    } catch (err) {
+      if (err.message?.includes('404') || err.message?.includes('Not Found') || err.message?.includes('Not in queue')) {
+        setQueuePosition(null)
+        setSelectedAppointment(null)
+        // Don't show error for appointments not in queue - this is normal
       } else {
         setError('Failed to get queue position')
+        showToast('Failed to check queue position', 'error')
       }
       console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -264,11 +345,11 @@ export default function PatientView() {
   // Filter appointments based on selected filter (for upcoming appointments tab)
   const getFilteredAppointments = () => {
     const now = new Date()
-    // Always show upcoming appointments that are not cancelled and not completed
+    // Always show upcoming appointments that are not cancelled, not completed, and not missed
     return appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
       const aptDate = new Date(apt.dateTime)
-      return aptDate > now && status !== 'CANCELLED' && status !== 'COMPLETED'
+      return aptDate > now && status !== 'CANCELLED' && status !== 'COMPLETED' && status !== 'MISSED'
     })
   }
 
@@ -317,22 +398,49 @@ export default function PatientView() {
 
   // Get past appointments for medical history
   const getPastAppointments = () => {
+    if (!appointments || appointments.length === 0) {
+      return []
+    }
+    
     const now = new Date()
     const past = appointments.filter(apt => {
+      if (!apt || !apt.dateTime) {
+        return false
+      }
+      
       const status = apt.apptStatus?.toUpperCase() || ''
       const aptDate = new Date(apt.dateTime)
-      return aptDate <= now && status !== 'CANCELLED'
+      
+      // COMPLETED appointments should always show in history, regardless of date
+      if (status === 'COMPLETED') {
+        return true
+      }
+      
+      // Include all past appointments (by date/time) that are not cancelled
+      // This includes: ARRIVED, NO_SHOW, MISSED, and even SCHEDULED if in the past
+      const isPast = aptDate <= now
+      const isNotCancelled = status !== 'CANCELLED'
+      
+      return isPast && isNotCancelled
     })
-    return applyMedicalHistoryFilters(past)
+    
+    // Sort by date descending (most recent first)
+    const sorted = past.sort((a, b) => {
+      const dateA = new Date(a.dateTime)
+      const dateB = new Date(b.dateTime)
+      return dateB - dateA
+    })
+    
+    return applyMedicalHistoryFilters(sorted)
   }
 
-  // Get cancelled appointments for archive
+  // Get cancelled and missed appointments for archive
   const getCancelledAppointments = () => {
-    const cancelled = appointments.filter(apt => {
+    const archived = appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
-      return status === 'CANCELLED'
+      return status === 'CANCELLED' || status === 'MISSED'
     })
-    return applyMedicalHistoryFilters(cancelled)
+    return applyMedicalHistoryFilters(archived)
   }
 
   // Format date and time helper
@@ -558,6 +666,7 @@ export default function PatientView() {
       // Only close if click is completely outside all dropdown areas
       if (!isInsideDropdown) {
         setShowDoctorDropdown(false)
+        setShowClinicDropdown(false)
         setShowSpecialtyDropdown(false)
         setShowRegionDropdown(false)
         setShowMedicalHistoryDoctorDropdown(false)
@@ -753,9 +862,15 @@ export default function PatientView() {
       filtered = filtered.filter(c => c.specialty === filterSpecialty)
     }
     if (filterClinic) {
-      filtered = filtered.filter(c => 
-        c.name?.toLowerCase().includes(filterClinic.toLowerCase())
-      )
+      // Filter by clinic ID if a clinic is selected, otherwise filter by name search
+      const clinicId = parseInt(filterClinic)
+      if (!isNaN(clinicId)) {
+        filtered = filtered.filter(c => c.id === clinicId)
+      } else {
+        filtered = filtered.filter(c => 
+          c.name?.toLowerCase().includes(filterClinic.toLowerCase())
+        )
+      }
     }
     if (filterDoctor) {
       // Filter clinics that have the selected doctor
@@ -832,6 +947,14 @@ export default function PatientView() {
     if (!filterDoctorSearch) return doctors
     return doctors.filter(d => 
       `${d.fname} ${d.lname}`.toLowerCase().includes(filterDoctorSearch.toLowerCase())
+    )
+  }
+
+  // Get filtered clinics for appointments dropdown
+  const getFilteredClinics = () => {
+    if (!filterClinicSearch) return clinics
+    return clinics.filter(c => 
+      c.name?.toLowerCase().includes(filterClinicSearch.toLowerCase())
     )
   }
 
@@ -1002,9 +1125,12 @@ export default function PatientView() {
     return existingAppointments.filter(apt => {
       const aptDate = new Date(apt.dateTime)
       const slotDate = new Date(slotDatetime)
+      const status = apt.apptStatus?.toUpperCase() || ''
+      // Only count scheduled appointments (exclude cancelled and completed)
       // Check if appointments are at the exact same time (same hour and minute)
       return aptDate.getHours() === slotDate.getHours() && 
-             aptDate.getMinutes() === slotDate.getMinutes()
+             aptDate.getMinutes() === slotDate.getMinutes() &&
+             status === 'SCHEDULED'
     }).length
   }
 
@@ -1208,22 +1334,49 @@ export default function PatientView() {
                   <h2 className="queue-section-title">Your Queue Number</h2>
                   {queuePosition && selectedAppointment ? (
                     <div className="queue-active-display">
-                      <div className="queue-number-large">
-                        <span className="queue-number">{queuePosition.position || 'N/A'}</span>
-                      </div>
+                      {queuePosition.status === 'CALLED' ? (
+                        <div className="queue-called-indicator">
+                          <div className="queue-called-icon">!</div>
+                          <h3 className="queue-called-title">It's your turn!</h3>
+                          <p className="queue-called-message">Please proceed to doctor's room</p>
+                        </div>
+                      ) : (
+                        <div className="queue-number-large">
+                          <span className="queue-number">{queuePosition.position || 'N/A'}</span>
+                        </div>
+                      )}
                       <div className="queue-info">
-                        <div className="queue-info-item">
-                          <span className="queue-info-label">Total in Queue</span>
-                          <span className="queue-info-value">{queuePosition.totalInQueue || 'N/A'}</span>
-                        </div>
-                        <div className="queue-info-item">
-                          <span className="queue-info-label">Status</span>
-                          <span className="queue-info-value">{queuePosition.status || 'N/A'}</span>
-                        </div>
-                        <div className="queue-info-item">
-                          <span className="queue-info-label">Appointment</span>
-                          <span className="queue-info-value">#{selectedAppointment}</span>
-                        </div>
+                        {queuePosition.status === 'CALLED' ? (() => {
+                          const currentAppointment = appointments.find(apt => apt.appointmentId === selectedAppointment)
+                          const doctorName = currentAppointment?.doctorId ? (doctorNames[currentAppointment.doctorId] || `Doctor #${currentAppointment.doctorId}`) : 'N/A'
+                          return (
+                            <>
+                              <div className="queue-info-item">
+                                <span className="queue-info-label">Doctor</span>
+                                <span className="queue-info-value">{doctorName}</span>
+                              </div>
+                              <div className="queue-info-item">
+                                <span className="queue-info-label">Appointment</span>
+                                <span className="queue-info-value">#{selectedAppointment}</span>
+                              </div>
+                            </>
+                          )
+                        })() : (
+                          <>
+                            <div className="queue-info-item">
+                              <span className="queue-info-label">Total in Queue</span>
+                              <span className="queue-info-value">{queuePosition.totalInQueue || 'N/A'}</span>
+                            </div>
+                            <div className="queue-info-item">
+                              <span className="queue-info-label">Status</span>
+                              <span className="queue-status-badge queue-status-in-queue">{queuePosition.status || 'N/A'}</span>
+                            </div>
+                            <div className="queue-info-item">
+                              <span className="queue-info-label">Appointment</span>
+                              <span className="queue-info-value">#{selectedAppointment}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1276,13 +1429,19 @@ export default function PatientView() {
                             </p>
                           )}
                         </div>
-                        {queuePosition && selectedAppointment === apt.appointmentId ? (
-                          <div className="appointment-actions">
-                            <div className="queue-status-indicator">
-                              <span className="queue-status-text">In Queue</span>
-                            </div>
-                          </div>
-                        ) : null}
+                        <div className="appointment-actions">
+                          {queuePosition && selectedAppointment === apt.appointmentId && (
+                            queuePosition.status === 'CALLED' ? (
+                              <div className="queue-status-indicator queue-status-indicator-called">
+                                <span className="queue-status-text">📞 Called - Please proceed</span>
+                              </div>
+                            ) : (
+                              <div className="queue-status-indicator">
+                                <span className="queue-status-text">In Queue - Position {queuePosition.position}</span>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1373,13 +1532,52 @@ export default function PatientView() {
                       </div>
                       <div className="form-group">
                         <label>Clinic Name</label>
-                        <input
-                          type="text"
-                          placeholder="Search clinics"
-                          value={filterClinic}
-                          onChange={(e) => setFilterClinic(e.target.value)}
-                          className="input-sm"
-                        />
+                        <div className="searchable-dropdown">
+                          <input
+                            type="text"
+                            placeholder="Search clinics"
+                            value={filterClinicSearch}
+                            onChange={(e) => {
+                              setFilterClinicSearch(e.target.value)
+                              setShowClinicDropdown(true)
+                            }}
+                            onFocus={() => setShowClinicDropdown(true)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="input-sm"
+                          />
+                          {showClinicDropdown && getFilteredClinics().length > 0 && (
+                            <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                              {getFilteredClinics().map((clinic) => (
+                                <div
+                                  key={clinic.id}
+                                  className="dropdown-item"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setFilterClinic(clinic.id.toString())
+                                    setFilterClinicSearch(clinic.name)
+                                    setShowClinicDropdown(false)
+                                  }}
+                                >
+                                  {clinic.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {filterClinic && (
+                            <button
+                              className="clear-filter-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setFilterClinic('')
+                                setFilterClinicSearch('')
+                              }}
+                              type="button"
+                              aria-label="Clear clinic filter"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="form-group">
                         <label>Region</label>
@@ -1621,6 +1819,22 @@ export default function PatientView() {
                               </div>
                             </div>
                             <div className="appointment-actions-vertical">
+                              {queuePosition && selectedAppointment === apt.appointmentId && (
+                                queuePosition.status === 'CALLED' ? (
+                                  <div className="queue-status-indicator queue-status-indicator-called" style={{ marginBottom: '1rem' }}>
+                                    <span className="queue-status-text">📞 Called - Please proceed to reception</span>
+                                  </div>
+                                ) : (
+                                  <div className="queue-status-indicator" style={{ marginBottom: '1rem' }}>
+                                    <span className="queue-status-text">In Queue - Position {queuePosition.position}</span>
+                                    {queuePosition.totalInQueue && (
+                                      <span className="queue-status-subtext" style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                                        {queuePosition.totalInQueue} total in queue
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              )}
                               {apt.apptStatus !== 'CANCELLED' && (
                                 <>
                                   <button
@@ -1859,17 +2073,17 @@ export default function PatientView() {
                 </div>
               )}
 
-              {/* Archive (Cancelled) */}
+              {/* Archive (Cancelled and Missed) */}
               {medicalHistoryFilter === 'archive' && (
                 <div className="section-card">
                   <div className="section-header">
-                    <h2>Cancelled Appointments ({getCancelledAppointments().length})</h2>
+                    <h2>Archive ({getCancelledAppointments().length})</h2>
                   </div>
                   {loading ? (
                     <div className="loading">Loading...</div>
                   ) : getCancelledAppointments().length === 0 ? (
                     <div className="empty-state">
-                      <p>No cancelled appointments found</p>
+                      <p>No archived appointments found</p>
                     </div>
                   ) : (
                     <div className="appointments-table-container">
@@ -2244,7 +2458,11 @@ export default function PatientView() {
                                   <span className="time-slot-badge">Full</span>
                                 )}
                                 {count > 0 && available && (
-                                  <span className="time-slot-count">{count}/3</span>
+                                  <div className="time-slot-count-badge">
+                                    <span className="time-slot-count-number">{count}</span>
+                                    <span className="time-slot-count-separator">/</span>
+                                    <span className="time-slot-count-total">3</span>
+                                  </div>
                                 )}
                               </button>
                             )

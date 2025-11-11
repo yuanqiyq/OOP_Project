@@ -7,6 +7,7 @@ public enum AppointmentStatus {
     SCHEDULED("scheduled"),
     ARRIVED("arrived"),
     NO_SHOW("no-show"),
+    MISSED("missed"),
     CANCELLED("cancelled"),
     COMPLETED("completed");
 

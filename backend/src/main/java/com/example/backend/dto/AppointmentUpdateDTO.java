@@ -60,7 +60,7 @@ public class AppointmentUpdateDTO {
 
     /**
      * Appointment status
-     * Valid values: SCHEDULED, ARRIVED, NO_SHOW, CANCELLED, COMPLETED
+     * Valid values: SCHEDULED, ARRIVED, NO_SHOW, MISSED, CANCELLED, COMPLETED
      */
     @JsonDeserialize(using = AppointmentStatusDeserializer.class)
     private AppointmentStatus apptStatus;

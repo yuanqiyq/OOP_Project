@@ -19,6 +19,7 @@ import com.example.backend.model.Patient;
 import com.example.backend.model.Doctor;
 import com.example.backend.model.clinic.Clinic;
 import com.example.backend.model.appointments.Appointment;
+import com.example.backend.model.appointments.AppointmentStatus;
 import com.example.backend.model.notification.NotificationRequest;
 import com.example.backend.model.queue.QueueLog;
 import com.example.backend.repo.AppointmentRepository;
@@ -141,6 +142,7 @@ public class QueueService {
 
     /**
      * Calculate the queue position for a specific appointment
+     * Handles both IN_QUEUE and CALLED status entries
      *
      * @param appointmentId ID of the appointment
      * @return QueuePositionDTO with position information
@@ -148,10 +150,17 @@ public class QueueService {
      */
     @Transactional(readOnly = true)
     public QueuePositionDTO getQueuePosition(Long appointmentId) {
-        // Find the queue entry for this appointment
+        // First try to find IN_QUEUE entry
         Optional<QueueLog> queueEntry = queueRepository.findByAppointmentIdAndStatus(
                 appointmentId,
                 QueueLog.STATUS_IN_QUEUE);
+
+        // If not found, check for CALLED status
+        if (queueEntry.isEmpty()) {
+            queueEntry = queueRepository.findByAppointmentIdAndStatus(
+                    appointmentId,
+                    QueueLog.STATUS_CALLED);
+        }
 
         if (queueEntry.isEmpty()) {
             throw new QueueException("No active queue entry found for appointment ID: " + appointmentId);
@@ -159,6 +168,25 @@ public class QueueService {
 
         QueueLog entry = queueEntry.get();
 
+        // If status is CALLED, return special response
+        if (QueueLog.STATUS_CALLED.equals(entry.getStatus())) {
+            // Get the full queue to calculate total (for context)
+            List<QueueLog> clinicQueue = getClinicQueue(entry.getClinicId());
+            int totalInQueue = clinicQueue.size();
+
+            return QueuePositionDTO.builder()
+                    .appointmentId(appointmentId)
+                    .position(0) // Position 0 indicates called
+                    .status(entry.getStatus())
+                    .priority(entry.getPriority())
+                    .totalInQueue(totalInQueue)
+                    .estimatedWaitTimeMinutes(0) // No wait time when called
+                    .message("You have been called - please proceed to reception")
+                    .isQueued(true)
+                    .build();
+        }
+
+        // For IN_QUEUE status, calculate position normally
         // Get the full queue to calculate position
         List<QueueLog> clinicQueue = getClinicQueue(entry.getClinicId());
         int position = clinicQueue.indexOf(entry) + 1;
@@ -262,6 +290,19 @@ public class QueueService {
         queueEntry.setStatus(newStatus);
         QueueLog saved = queueRepository.save(queueEntry);
 
+        // If queue status is MISSED, update the appointment status to MISSED
+        if (QueueLog.STATUS_MISSED.equals(newStatus)) {
+            Optional<Appointment> appointmentOpt = appointmentRepository.findById(queueEntry.getAppointmentId());
+            if (appointmentOpt.isPresent()) {
+                Appointment appointment = appointmentOpt.get();
+                appointment.setApptStatus(AppointmentStatus.MISSED);
+                appointmentRepository.save(appointment);
+                log.info("Updated appointment {} status to MISSED", queueEntry.getAppointmentId());
+            } else {
+                log.warn("Could not update appointment status: appointment {} not found", queueEntry.getAppointmentId());
+            }
+        }
+
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(queueEntry.getClinicId()));
 
@@ -281,13 +322,13 @@ public class QueueService {
     }
 
     /**
-     * Handle missed patient return - create a new queue entry for them
-     * The original MISSED entry is kept for audit purposes
+     * Handle missed patient return - update existing MISSED entry to IN_QUEUE
+     * Updates the most recent MISSED entry for the appointment instead of creating a duplicate
      *
      * @param appointmentId ID of the original appointment
      * @param newPriority   New priority assigned by staff
-     * @return Newly created QueueLog entry
-     * @throws QueueException if appointment or original queue entry not found
+     * @return Updated QueueLog entry
+     * @throws QueueException if appointment or MISSED queue entry not found
      */
     @Transactional
     public QueueLog handleMissedPatientReturn(Long appointmentId, Integer newPriority) {
@@ -300,23 +341,36 @@ public class QueueService {
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new QueueException("Appointment not found with ID: " + appointmentId));
 
-        // Verify original MISSED entry exists (check if there's at least one MISSED
-        // entry)
-        boolean hasMissedEntry = queueRepository.findByAppointmentId(appointmentId)
+        // Find the most recent MISSED entry for this appointment
+        Optional<QueueLog> missedEntry = queueRepository.findByAppointmentId(appointmentId)
                 .stream()
-                .anyMatch(entry -> QueueLog.STATUS_MISSED.equals(entry.getStatus()));
+                .filter(entry -> QueueLog.STATUS_MISSED.equals(entry.getStatus()))
+                .max((e1, e2) -> e1.getCreatedAt().compareTo(e2.getCreatedAt())); // Get most recent
 
-        if (!hasMissedEntry) {
+        if (missedEntry.isEmpty()) {
             throw new QueueException("No MISSED queue entry found for appointment ID: " + appointmentId);
         }
 
-        // Create new queue entry (original MISSED entry is kept)
-        QueueLog newQueueEntry = new QueueLog(
-                appointment.getClinicId(),
-                appointmentId,
-                newPriority);
+        QueueLog queueEntry = missedEntry.get();
 
-        QueueLog saved = queueRepository.save(newQueueEntry);
+        // Validate transition
+        if (!QueueLog.isValidTransition(queueEntry.getStatus(), QueueLog.STATUS_IN_QUEUE)) {
+            throw new QueueException("Invalid status transition from " + queueEntry.getStatus() + " to IN_QUEUE");
+        }
+
+        // Update appointment status back to SCHEDULED since patient is being requeued
+        appointment.setApptStatus(AppointmentStatus.SCHEDULED);
+        appointmentRepository.save(appointment);
+        log.info("Updated appointment {} status to SCHEDULED (requeued)", appointmentId);
+
+        // Update existing MISSED entry to IN_QUEUE
+        queueEntry.setStatus(QueueLog.STATUS_IN_QUEUE);
+        queueEntry.setPriority(newPriority);
+        queueEntry.setCreatedAt(LocalDateTime.now()); // Update timestamp for queue ordering
+        QueueLog saved = queueRepository.save(queueEntry);
+
+        log.info("Updated MISSED queue entry {} (appointment {}) to IN_QUEUE with priority {}", 
+                saved.getQueueId(), appointmentId, newPriority);
 
         // Notify SSE listeners that queue changed
         eventPublisher.publishEvent(new QueueChangedEvent(appointment.getClinicId()));

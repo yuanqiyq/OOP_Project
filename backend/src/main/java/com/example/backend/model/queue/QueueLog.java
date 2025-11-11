@@ -126,7 +126,11 @@ public class QueueLog {
         if (STATUS_CALLED.equals(currentStatus)) {
             return STATUS_DONE.equals(newStatus) || STATUS_MISSED.equals(newStatus);
         }
-        // No transitions allowed from DONE or MISSED
+        // MISSED → IN_QUEUE (patient requeued after missing appointment)
+        if (STATUS_MISSED.equals(currentStatus)) {
+            return STATUS_IN_QUEUE.equals(newStatus);
+        }
+        // No transitions allowed from DONE
         return false;
     }
 }

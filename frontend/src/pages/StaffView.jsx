@@ -34,6 +34,15 @@ export default function StaffView() {
   const [selectedAppointmentForCheckIn, setSelectedAppointmentForCheckIn] = useState(null)
   const [checkInPriority, setCheckInPriority] = useState(1)
   
+  // Priority selection modal state for requeue
+  const [showRequeuePriorityModal, setShowRequeuePriorityModal] = useState(false)
+  const [selectedAppointmentForRequeue, setSelectedAppointmentForRequeue] = useState(null)
+  const [requeuePriority, setRequeuePriority] = useState(1)
+  
+  // Cancel confirmation modal state for missed appointments
+  const [showCancelConfirmationModal, setShowCancelConfirmationModal] = useState(false)
+  const [selectedAppointmentForCancel, setSelectedAppointmentForCancel] = useState(null)
+  
   // Doctor management state
   const [showAddDoctorModal, setShowAddDoctorModal] = useState(false)
   const [showEditDoctorModal, setShowEditDoctorModal] = useState(false)
@@ -58,6 +67,69 @@ export default function StaffView() {
   const [filterDoctor, setFilterDoctor] = useState('')
   const [filterDoctorSearch, setFilterDoctorSearch] = useState('')
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false)
+
+  // Helper function to get priority label
+  const getPriorityLabel = (priority) => {
+    switch (priority) {
+      case 1:
+        return 'Normal'
+      case 2:
+        return 'Elderly'
+      case 3:
+        return 'Emergency'
+      default:
+        return `Priority ${priority}`
+    }
+  }
+
+  // Global ESC key handler to close all modals
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        // Close all modals
+        if (showTreatmentModal) {
+          setShowTreatmentModal(false)
+          setSelectedAppointmentForTreatment(null)
+          setSelectedQueueIdForTreatment(null)
+          setTreatmentSummaryText('')
+        }
+        if (showPriorityModal) {
+          setShowPriorityModal(false)
+          setSelectedAppointmentForCheckIn(null)
+          setCheckInPriority(1)
+        }
+        if (showRequeuePriorityModal) {
+          setShowRequeuePriorityModal(false)
+          setSelectedAppointmentForRequeue(null)
+          setRequeuePriority(1)
+        }
+        if (showCancelConfirmationModal) {
+          setShowCancelConfirmationModal(false)
+          setSelectedAppointmentForCancel(null)
+        }
+        if (showMedicalHistoryModal) {
+          setShowMedicalHistoryModal(false)
+          setSelectedPatientForHistory(null)
+          setPatientAppointmentsHistory([])
+        }
+        if (showTreatmentSummaryModal) {
+          setShowTreatmentSummaryModal(false)
+          setSelectedAppointmentForSummary(null)
+        }
+        if (showAddDoctorModal) {
+          setShowAddDoctorModal(false)
+          setNewDoctor({ fname: '', lname: '', shiftDays: [] })
+        }
+        if (showEditDoctorModal) {
+          setShowEditDoctorModal(false)
+          setEditingDoctor(null)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [showTreatmentModal, showPriorityModal, showRequeuePriorityModal, showCancelConfirmationModal, showMedicalHistoryModal, showTreatmentSummaryModal, showAddDoctorModal, showEditDoctorModal])
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -222,6 +294,10 @@ export default function StaffView() {
       await fetchQueue(false)
       await fetchCurrentlyServing()
       await fetchMissed()
+      // If marking as MISSED, also refresh appointments to update appointment status
+      if (status === 'MISSED') {
+        await fetchAppointments()
+      }
     } catch (err) {
       setError(err.message || 'Failed to update queue status')
       setTimeout(() => setError(''), 5000)
@@ -292,6 +368,12 @@ export default function StaffView() {
     }
   }
 
+  const openRequeueModal = (appointmentId) => {
+    setSelectedAppointmentForRequeue(appointmentId)
+    setRequeuePriority(1) // Default to normal priority
+    setShowRequeuePriorityModal(true)
+  }
+
   const requeuePatient = async (appointmentId, priority = 1) => {
     try {
       setLoading(true)
@@ -299,6 +381,12 @@ export default function StaffView() {
       setError('')
       setSuccess('Patient re-queued successfully')
       setTimeout(() => setSuccess(''), 3000)
+      
+      // Close modal and reset state
+      setShowRequeuePriorityModal(false)
+      setSelectedAppointmentForRequeue(null)
+      setRequeuePriority(1)
+      
       await fetchQueue(false)
       await fetchMissed()
     } catch (err) {
@@ -307,6 +395,11 @@ export default function StaffView() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRequeueWithPriority = async () => {
+    if (!selectedAppointmentForRequeue) return
+    await requeuePatient(selectedAppointmentForRequeue, requeuePriority)
   }
 
   const updateAppointmentStatus = async (appointmentId, status) => {
@@ -325,19 +418,52 @@ export default function StaffView() {
     }
   }
 
-  // Cancel appointment (bypasses 24h restriction for staff)
-  const cancelAppointment = async (appointmentId) => {
-    if (!window.confirm('Are you sure you want to cancel this appointment?')) {
-      return
+  // Mark appointment as MISSED (for appointments that never showed up)
+  const markAppointmentAsMissed = async (appointmentId) => {
+    try {
+      setLoading(true)
+      await appointmentAPI.updateStatus(appointmentId, 'MISSED')
+      setError('')
+      setSuccess('Appointment marked as missed')
+      setTimeout(() => setSuccess(''), 3000)
+      await fetchAppointments()
+    } catch (err) {
+      setError(err.message || 'Failed to mark appointment as missed')
+      setTimeout(() => setError(''), 5000)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  // Cancel appointment (bypasses 24h restriction for staff)
+  // Opens confirmation modal instead of using window.confirm
+  const cancelAppointment = (appointmentId) => {
+    openCancelConfirmationModal(appointmentId)
+  }
+
+  // Open cancel confirmation modal for missed appointment
+  const openCancelConfirmationModal = (appointmentId) => {
+    setSelectedAppointmentForCancel(appointmentId)
+    setShowCancelConfirmationModal(true)
+  }
+
+  // Cancel appointment with confirmation (works for both missed and waiting-to-check-in)
+  const cancelMissedAppointment = async () => {
+    if (!selectedAppointmentForCancel) return
     
     try {
       setLoading(true)
-      await appointmentAPI.updateStatus(appointmentId, 'CANCELLED')
+      await appointmentAPI.updateStatus(selectedAppointmentForCancel, 'CANCELLED')
       setError('')
       setSuccess('Appointment cancelled successfully')
       setTimeout(() => setSuccess(''), 3000)
+      
+      // Close modal and reset state
+      setShowCancelConfirmationModal(false)
+      setSelectedAppointmentForCancel(null)
+      
       await fetchAppointments()
+      await fetchMissed()
     } catch (err) {
       setError(err.message || 'Failed to cancel appointment')
       setTimeout(() => setError(''), 5000)
@@ -408,6 +534,43 @@ export default function StaffView() {
       return status === 'CANCELLED'
     })
     return applyFilters(cancelled)
+  }
+
+  // Get appointments waiting to be checked in (SCHEDULED, not in queue, not CALLED, not MISSED)
+  const getAppointmentsWaitingCheckIn = () => {
+    // Get appointment IDs that are already in the queue (IN_QUEUE status)
+    const queueAppointmentIds = new Set(queue.map(entry => entry.appointmentId))
+    
+    // Get appointment ID that is currently being served (CALLED status)
+    const calledAppointmentId = currentServing?.appointmentId || null
+    
+    return appointments.filter(apt => {
+      const status = apt.apptStatus?.toUpperCase() || ''
+      // Only SCHEDULED appointments
+      if (status !== 'SCHEDULED') {
+        return false
+      }
+      
+      // Explicitly exclude MISSED appointments
+      if (status === 'MISSED') {
+        return false
+      }
+      
+      // Exclude appointments already in queue (IN_QUEUE status)
+      if (queueAppointmentIds.has(apt.appointmentId)) {
+        return false
+      }
+      
+      // Exclude appointments that are CALLED (currently being served)
+      if (calledAppointmentId && calledAppointmentId === apt.appointmentId) {
+        return false
+      }
+      
+      return true
+    }).sort((a, b) => {
+      // Sort by appointment time (earliest first)
+      return new Date(a.dateTime) - new Date(b.dateTime)
+    })
   }
 
   // Open medical history modal for a patient
@@ -507,19 +670,54 @@ export default function StaffView() {
     }
   }
 
-  const callNextPatient = async () => {
-    if (!clinicId) return
+  const callNextPatient = async (e) => {
+    // Prevent any event bubbling issues
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    
+    console.log('callNextPatient called', { clinicId, loading, queueLength: queue.length })
+    
+    if (!clinicId) {
+      setError('Clinic ID not available')
+      setTimeout(() => setError(''), 5000)
+      return
+    }
+    
+    if (loading) {
+      console.log('Already loading, ignoring click')
+      return
+    }
     
     try {
       setLoading(true)
-      await queueAPI.callNext(clinicId)
       setError('')
-      setSuccess('Next patient called successfully!')
-      setTimeout(() => setSuccess(''), 3000)
-      await fetchQueue(false)
-      await fetchCurrentlyServing()
+      
+      console.log('Calling backend endpoint...')
+      // Call the backend endpoint to call next patient in priority queue
+      const result = await queueAPI.callNext(clinicId)
+      console.log('Backend response:', result)
+      
+      if (result) {
+        setSuccess(`Patient #${result.appointmentId} called successfully!`)
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        setSuccess('Next patient called successfully!')
+        setTimeout(() => setSuccess(''), 3000)
+      }
+      
+      // Refresh all relevant data
+      await Promise.all([
+        fetchQueue(false),
+        fetchCurrentlyServing(),
+        fetchMissed(),
+        fetchAppointments()
+      ])
     } catch (err) {
-      setError(err.message || 'Failed to call next patient')
+      console.error('Error calling next patient:', err)
+      const errorMessage = err.message || err.response?.data?.message || 'Failed to call next patient'
+      setError(errorMessage)
       setTimeout(() => setError(''), 5000)
     } finally {
       setLoading(false)
@@ -656,7 +854,6 @@ export default function StaffView() {
       <Navbar />
       <div className="staff-layout">
         <div className="staff-main">
-          {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
 
           {currentView === 'dashboard' && (
@@ -690,15 +887,24 @@ export default function StaffView() {
                   <div className="empty-state-large">
                     <div className="empty-icon">📭</div>
                     <p>No patient currently being served</p>
-                    {queue.length > 0 && (
+                    {queue.length > 0 ? (
                       <button
-                        onClick={callNextPatient}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          callNextPatient(e)
+                        }}
                         className="btn btn-primary btn-large"
                         disabled={loading}
-                        style={{ marginTop: '1rem' }}
+                        style={{ marginTop: '1rem', cursor: loading ? 'not-allowed' : 'pointer' }}
+                        type="button"
                       >
                         📞 Call Next Patient
                       </button>
+                    ) : (
+                      <p style={{ marginTop: '1rem', color: '#666', fontSize: '0.9rem' }}>
+                        No patients in queue
+                      </p>
                     )}
                   </div>
                 ) : currentServing?.appointmentId ? (
@@ -715,16 +921,29 @@ export default function StaffView() {
                       >
                         ✓ Mark as Done
                       </button>
-                      {queue.length > 0 && (
+                      <button
+                        onClick={() => updateQueueStatus(currentServing.queueId, 'MISSED')}
+                        className="btn btn-warning btn-large"
+                        disabled={loading}
+                        style={{ marginLeft: '0.5rem' }}
+                      >
+                        ⚠ Mark as Missed
+                      </button>
+                      {queue.length > 0 ? (
                         <button
-                          onClick={callNextPatient}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            callNextPatient(e)
+                          }}
                           className="btn btn-primary btn-large"
                           disabled={loading}
-                          style={{ marginLeft: '0.5rem' }}
+                          style={{ marginLeft: '0.5rem', cursor: loading ? 'not-allowed' : 'pointer' }}
+                          type="button"
                         >
                           📞 Call Next
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -755,7 +974,7 @@ export default function StaffView() {
                           <div className="queue-header">
                             <h3>Appointment #{entry.appointmentId}</h3>
                             <span className={`priority-badge priority-${entry.priority}`}>
-                              Priority {entry.priority}
+                              {getPriorityLabel(entry.priority)}
                             </span>
                           </div>
                           <div className="queue-info-grid">
@@ -788,22 +1007,6 @@ export default function StaffView() {
                           >
                             📞 Call
                           </button>
-                          {index === 0 && (
-                            <button
-                              onClick={() => openTreatmentModal(entry.appointmentId, entry.queueId)}
-                              className="btn btn-success"
-                              disabled={loading}
-                            >
-                              ✓ Done
-                            </button>
-                          )}
-                          <button
-                            onClick={() => updateQueueStatus(entry.queueId, 'MISSED')}
-                            className="btn btn-warning"
-                            disabled={loading}
-                          >
-                            ⚠ Missed
-                          </button>
                           <button
                             onClick={() => fetchQueueHistory(entry.appointmentId)}
                             className="btn btn-outline"
@@ -817,6 +1020,77 @@ export default function StaffView() {
                   </div>
                 )}
               </div>
+
+              {/* Appointments Waiting to Check In */}
+              {getAppointmentsWaitingCheckIn().length > 0 && (
+                <div className="section-card waiting-checkin-card">
+                  <div className="section-header">
+                    <h2>Waiting to Check In ({getAppointmentsWaitingCheckIn().length})</h2>
+                    <span className="waiting-checkin-badge">
+                      {getAppointmentsWaitingCheckIn().length} appointment{getAppointmentsWaitingCheckIn().length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="waiting-checkin-list">
+                    {getAppointmentsWaitingCheckIn().map((apt) => {
+                      const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                      const patient = patients.find(p => p.patientId === apt.patientId || p.userId === apt.patientId)
+                      const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${apt.patientId}`
+                      const doctor = doctors.find(d => d.id === apt.doctorId)
+                      return (
+                        <div key={apt.appointmentId} className="waiting-checkin-item">
+                          <div className="waiting-checkin-info">
+                            <div className="waiting-checkin-header">
+                              <h3>Appointment #{apt.appointmentId}</h3>
+                              <span className="appointment-time-badge">
+                                🕐 {formattedTime}
+                              </span>
+                            </div>
+                            <div className="waiting-checkin-details">
+                              <div className="detail-row">
+                                <span className="detail-label">Patient:</span>
+                                <span className="detail-value">
+                                  {patientName}
+                                </span>
+                              </div>
+                              {doctor && (
+                                <div className="detail-row">
+                                  <span className="detail-label">Doctor:</span>
+                                  <span className="detail-value">
+                                    Dr. {doctor.fname} {doctor.lname}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="detail-row">
+                                <span className="detail-label">Date:</span>
+                                <span className="detail-value">{formattedDate}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="waiting-checkin-actions">
+                            <button
+                              onClick={() => openCheckInModal(apt.appointmentId)}
+                              className="btn btn-primary"
+                              disabled={loading}
+                              title="Check in patient to queue"
+                            >
+                              ✓ Check In
+                            </button>
+                            <button
+                              onClick={() => markAppointmentAsMissed(apt.appointmentId)}
+                              className="btn btn-warning"
+                              disabled={loading}
+                              title="Mark appointment as missed if patient doesn't show up"
+                              style={{ marginLeft: '0.5rem' }}
+                            >
+                              ⚠ Missed
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Missed Patients */}
               {missed.length > 0 && (
@@ -834,18 +1108,18 @@ export default function StaffView() {
                         </div>
                         <div className="missed-actions">
                           <button
-                            onClick={() => requeuePatient(entry.appointmentId, 1)}
+                            onClick={() => openRequeueModal(entry.appointmentId)}
                             className="btn btn-primary"
                             disabled={loading}
                           >
-                            ↻ Re-queue (Normal)
+                            ↻ Re-queue
                           </button>
                           <button
-                            onClick={() => requeuePatient(entry.appointmentId, 2)}
-                            className="btn btn-success"
+                            onClick={() => openCancelConfirmationModal(entry.appointmentId)}
+                            className="btn btn-warning"
                             disabled={loading}
                           >
-                            ↻ Re-queue (Priority)
+                            ✕ Cancel
                           </button>
                         </div>
                       </div>
@@ -978,11 +1252,12 @@ export default function StaffView() {
                             fontFamily: 'inherit'
                           }}
                         >
-                          <option value={1}>Normal Priority</option>
-                          <option value={2}>High Priority</option>
+                          <option value={1}>Normal (Priority 1)</option>
+                          <option value={2}>Elderly (Priority 2)</option>
+                          <option value={3}>Emergency (Priority 3)</option>
                         </select>
                         <p className="form-hint" style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
-                          High priority patients will be placed ahead of normal priority patients in the queue.
+                          Queue order: Emergency (3) → Elderly (2) → Normal (1). Within the same priority, earlier check-ins are served first.
                         </p>
                       </div>
                       <div className="modal-actions">
@@ -999,6 +1274,138 @@ export default function StaffView() {
                               setShowPriorityModal(false)
                               setSelectedAppointmentForCheckIn(null)
                               setCheckInPriority(1)
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Cancel Confirmation Modal for Missed Appointments */}
+              {showCancelConfirmationModal && selectedAppointmentForCancel && (
+                <div className="modal-overlay" onClick={() => {
+                  if (!loading) {
+                    setShowCancelConfirmationModal(false)
+                    setSelectedAppointmentForCancel(null)
+                  }
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Cancel Appointment #{selectedAppointmentForCancel}</h2>
+                      <button
+                        onClick={() => {
+                          if (!loading) {
+                            setShowCancelConfirmationModal(false)
+                            setSelectedAppointmentForCancel(null)
+                          }
+                        }}
+                        className="btn-close"
+                        disabled={loading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <p style={{ fontSize: '1rem', color: '#2d2d2d', marginBottom: '1.5rem' }}>
+                        Are you sure you want to cancel appointment #{selectedAppointmentForCancel}? This action cannot be undone.
+                      </p>
+                      <div className="modal-actions">
+                        <button
+                          onClick={cancelMissedAppointment}
+                          className="btn btn-warning"
+                          disabled={loading}
+                        >
+                          {loading ? 'Cancelling...' : '✕ Cancel Appointment'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loading) {
+                              setShowCancelConfirmationModal(false)
+                              setSelectedAppointmentForCancel(null)
+                            }
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Keep Appointment
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Priority Selection Modal for Re-queue */}
+              {showRequeuePriorityModal && selectedAppointmentForRequeue && (
+                <div className="modal-overlay" onClick={() => {
+                  if (!loading) {
+                    setShowRequeuePriorityModal(false)
+                    setSelectedAppointmentForRequeue(null)
+                    setRequeuePriority(1)
+                  }
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Re-queue Patient - Appointment #{selectedAppointmentForRequeue}</h2>
+                      <button
+                        onClick={() => {
+                          if (!loading) {
+                            setShowRequeuePriorityModal(false)
+                            setSelectedAppointmentForRequeue(null)
+                            setRequeuePriority(1)
+                          }
+                        }}
+                        className="btn-close"
+                        disabled={loading}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Priority Level</label>
+                        <select
+                          value={requeuePriority}
+                          onChange={(e) => setRequeuePriority(parseInt(e.target.value))}
+                          className="select-input"
+                          disabled={loading}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem',
+                            border: '2px solid rgba(78, 205, 196, 0.2)',
+                            borderRadius: '10px',
+                            fontSize: '0.95rem',
+                            fontFamily: 'inherit'
+                          }}
+                        >
+                          <option value={1}>Normal (Priority 1)</option>
+                          <option value={2}>Elderly (Priority 2)</option>
+                          <option value={3}>Emergency (Priority 3)</option>
+                        </select>
+                        <p className="form-hint" style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+                          Queue order: Emergency (3) → Elderly (2) → Normal (1). Within the same priority, earlier check-ins are served first.
+                        </p>
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          onClick={handleRequeueWithPriority}
+                          className="btn btn-primary"
+                          disabled={loading}
+                        >
+                          {loading ? 'Re-queuing...' : '↻ Re-queue'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!loading) {
+                              setShowRequeuePriorityModal(false)
+                              setSelectedAppointmentForRequeue(null)
+                              setRequeuePriority(1)
                             }
                           }}
                           className="btn btn-secondary"
@@ -1037,7 +1444,7 @@ export default function StaffView() {
                               </div>
                               <div className="history-details">
                                 <p><strong>Queue ID:</strong> {entry.queueId}</p>
-                                <p><strong>Priority:</strong> {entry.priority}</p>
+                                <p><strong>Priority:</strong> {getPriorityLabel(entry.priority)} ({entry.priority})</p>
                                 <p><strong>Created:</strong> {new Date(entry.createdAt).toLocaleString()}</p>
                               </div>
                             </div>
