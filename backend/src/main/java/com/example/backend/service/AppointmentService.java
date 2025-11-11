@@ -49,10 +49,16 @@ public class AppointmentService {
 
     // Create a new appointment
     public Appointment createAppointment(Appointment appointment) {
-        // Check for double booking (same clinic, doctor, and time)
-        if (isDoubleBooking(appointment.getClinicId(), appointment.getDoctorId(), appointment.getDateTime())) {
+        // Check if slot is full (max 3 appointments per slot)
+        long existingCount = appointmentRepository.countByClinicIdAndDoctorIdAndDateTime(
+            appointment.getClinicId(), 
+            appointment.getDoctorId(), 
+            appointment.getDateTime()
+        );
+        
+        if (existingCount >= 3) {
             throw new DoubleBookingException(
-                    "Double booking detected: An appointment already exists for this doctor at the specified time and clinic");
+                    "Slot is full: This time slot already has 3 appointments. Please choose another time.");
         }
 
         // Always set status to SCHEDULED for new appointments
@@ -134,9 +140,15 @@ public class AppointmentService {
         }
     }
 
-    // Check for double booking
+    // Check for double booking (deprecated - now using slot capacity check instead)
+    @Deprecated
     public boolean isDoubleBooking(Long clinicId, Long doctorId, LocalDateTime dateTime) {
         return appointmentRepository.existsByClinicIdAndDoctorIdAndDateTime(clinicId, doctorId, dateTime);
+    }
+    
+    // Get appointment count for a specific slot (clinic, doctor, time)
+    public long getAppointmentCountForSlot(Long clinicId, Long doctorId, LocalDateTime dateTime) {
+        return appointmentRepository.countByClinicIdAndDoctorIdAndDateTime(clinicId, doctorId, dateTime);
     }
 
     // Update appointment

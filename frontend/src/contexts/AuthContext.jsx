@@ -193,9 +193,14 @@ export const AuthProvider = ({ children }) => {
   const signUp = async (email, password, userData) => {
     try {
       // Step 1: Create auth account
+      // Note: If email confirmation is disabled in Supabase, user will be automatically signed in
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          // Disable email confirmation redirect - we want to sign in immediately
+          emailRedirectTo: undefined,
+        }
       })
 
       if (error) throw error
@@ -227,7 +232,29 @@ export const AuthProvider = ({ children }) => {
           throw new Error(backendError.message || 'Failed to create patient account')
         }
         
-        await fetchUserProfile(data.user.id, data.user.email)
+        // Step 3: If user has a session (email confirmation disabled), fetch profile and sign them in
+        // Otherwise, if email confirmation is required, the session will be null
+        if (data.session) {
+          // User is automatically signed in (email confirmation disabled)
+          setUser(data.user)
+          await fetchUserProfile(data.user.id, data.user.email)
+        } else {
+          // Email confirmation is required - sign in the user anyway after creating the account
+          // This allows immediate access if email confirmation is disabled in Supabase settings
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+          
+          if (signInError) {
+            // If sign in fails, it might be because email confirmation is required
+            // In that case, we'll let the auth state change handler deal with it
+            console.warn('Could not auto-sign in after signup:', signInError.message)
+          } else if (signInData.user) {
+            setUser(signInData.user)
+            await fetchUserProfile(signInData.user.id, signInData.user.email)
+          }
+        }
       }
 
       return { data, error: null }

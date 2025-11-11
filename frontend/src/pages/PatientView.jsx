@@ -720,13 +720,13 @@ export default function PatientView() {
     }
   }, [selectedDoctor, selectedClinic, showBookingModal]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generate time slots when clinic and date are selected
+  // Generate time slots when clinic, date, or doctor are selected
   useEffect(() => {
     if (selectedClinic && selectedDate && showBookingModal) {
       generateTimeSlots()
       fetchExistingAppointments()
     }
-  }, [selectedClinic, selectedDate, showBookingModal])
+  }, [selectedClinic, selectedDate, selectedDoctor, showBookingModal])
 
   // Auto-select the original appointment's time slot when rescheduling
   useEffect(() => {
@@ -1122,13 +1122,18 @@ export default function PatientView() {
   }
 
   const getAppointmentCountForSlot = (slotDatetime) => {
+    if (!selectedDoctor || !selectedClinic) return 0
+    
     return existingAppointments.filter(apt => {
       const aptDate = new Date(apt.dateTime)
       const slotDate = new Date(slotDatetime)
       const status = apt.apptStatus?.toUpperCase() || ''
-      // Only count scheduled appointments (exclude cancelled and completed)
-      // Check if appointments are at the exact same time (same hour and minute)
-      return aptDate.getHours() === slotDate.getHours() && 
+      
+      // Only count scheduled appointments (exclude cancelled, completed, missed)
+      // Check if appointments are for the same doctor, clinic, and exact same time
+      return apt.doctorId === selectedDoctor.id &&
+             apt.clinicId === selectedClinic.id &&
+             aptDate.getHours() === slotDate.getHours() && 
              aptDate.getMinutes() === slotDate.getMinutes() &&
              status === 'SCHEDULED'
     }).length

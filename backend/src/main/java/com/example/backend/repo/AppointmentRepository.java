@@ -57,4 +57,9 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     // Check if appointment exists by clinic ID, doctor ID and date time (prevent
     // double booking)
     boolean existsByClinicIdAndDoctorIdAndDateTime(Long clinicId, Long doctorId, LocalDateTime dateTime);
+    
+    // Count SCHEDULED appointments by clinic ID, doctor ID and date time (for checking slot capacity)
+    // Only counts SCHEDULED appointments, excluding cancelled, completed, missed, etc.
+    @Query("SELECT COUNT(a) FROM Appointment a WHERE a.clinicId = :clinicId AND a.doctorId = :doctorId AND a.dateTime = :dateTime AND a.apptStatus = 'SCHEDULED'")
+    long countByClinicIdAndDoctorIdAndDateTime(@Param("clinicId") Long clinicId, @Param("doctorId") Long doctorId, @Param("dateTime") LocalDateTime dateTime);
 }

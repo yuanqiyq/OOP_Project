@@ -1093,40 +1093,54 @@ export default function StaffView() {
               )}
 
               {/* Missed Patients */}
-              {missed.length > 0 && (
-                <div className="section-card missed-card">
-                  <div className="section-header">
-                    <h2>Missed Patients ({missed.length})</h2>
-                  </div>
-                  <div className="missed-list-enhanced">
-                    {missed.map((entry) => (
-                      <div key={entry.queueId} className="missed-item-enhanced">
-                        <div className="missed-info">
-                          <h3>Appointment #{entry.appointmentId}</h3>
-                          <p>Status: {entry.status}</p>
-                          <p>Missed at: {new Date(entry.createdAt).toLocaleString()}</p>
+              {(() => {
+                // Filter out missed appointments that have been cancelled
+                const activeMissed = missed.filter(entry => {
+                  const appointment = appointments.find(apt => apt.appointmentId === entry.appointmentId)
+                  // If appointment not found in appointments list, exclude it (might be cancelled)
+                  // If appointment is found, check if it's cancelled
+                  if (!appointment) {
+                    return false // Exclude if appointment not found (likely cancelled or deleted)
+                  }
+                  const status = appointment.apptStatus?.toUpperCase() || ''
+                  return status !== 'CANCELLED'
+                })
+                
+                return activeMissed.length > 0 && (
+                  <div className="section-card missed-card">
+                    <div className="section-header">
+                      <h2>Missed Patients ({activeMissed.length})</h2>
+                    </div>
+                    <div className="missed-list-enhanced">
+                      {activeMissed.map((entry) => (
+                        <div key={entry.queueId} className="missed-item-enhanced">
+                          <div className="missed-info">
+                            <h3>Appointment #{entry.appointmentId}</h3>
+                            <p>Status: {entry.status}</p>
+                            <p>Missed at: {new Date(entry.createdAt).toLocaleString()}</p>
+                          </div>
+                          <div className="missed-actions">
+                            <button
+                              onClick={() => openRequeueModal(entry.appointmentId)}
+                              className="btn btn-primary"
+                              disabled={loading}
+                            >
+                              ↻ Re-queue
+                            </button>
+                            <button
+                              onClick={() => openCancelConfirmationModal(entry.appointmentId)}
+                              className="btn btn-warning"
+                              disabled={loading}
+                            >
+                              ✕ Cancel
+                            </button>
+                          </div>
                         </div>
-                        <div className="missed-actions">
-                          <button
-                            onClick={() => openRequeueModal(entry.appointmentId)}
-                            className="btn btn-primary"
-                            disabled={loading}
-                          >
-                            ↻ Re-queue
-                          </button>
-                          <button
-                            onClick={() => openCancelConfirmationModal(entry.appointmentId)}
-                            className="btn btn-warning"
-                            disabled={loading}
-                          >
-                            ✕ Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {/* Treatment Summary Modal */}
               {showTreatmentModal && selectedAppointmentForTreatment && (

@@ -570,6 +570,7 @@ public class QueueService {
         // Filter out appointments that have a DONE status (already completed)
         // Filter out appointments that are IN_QUEUE (already re-queued - they're in the
         // queue section)
+        // Filter out appointments that have been CANCELLED
         return latestMissedEntries.stream()
                 .filter(entry -> {
                     // Check if this appointment has a DONE entry
@@ -580,8 +581,12 @@ public class QueueService {
                     boolean isInQueue = queueRepository.existsByAppointmentIdAndStatus(
                             entry.getAppointmentId(),
                             QueueLog.STATUS_IN_QUEUE);
-                    // Only include if it doesn't have a DONE entry and is not currently IN_QUEUE
-                    return !hasDoneEntry && !isInQueue;
+                    // Check if the appointment itself has been cancelled
+                    Optional<Appointment> appointmentOpt = appointmentRepository.findById(entry.getAppointmentId());
+                    boolean isCancelled = appointmentOpt.isPresent() && 
+                                         AppointmentStatus.CANCELLED.equals(appointmentOpt.get().getApptStatus());
+                    // Only include if it doesn't have a DONE entry, is not currently IN_QUEUE, and is not cancelled
+                    return !hasDoneEntry && !isInQueue && !isCancelled;
                 })
                 .collect(Collectors.toList());
     }
