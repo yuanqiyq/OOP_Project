@@ -40,6 +40,7 @@ export default function AdminView() {
   // Create forms state
   const [showCreateStaff, setShowCreateStaff] = useState(false)
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
+  const [showCreatePatient, setShowCreatePatient] = useState(false)
   const [selectedClinicId, setSelectedClinicId] = useState(969)
   const [testEndpoint, setTestEndpoint] = useState('')
   
@@ -57,6 +58,21 @@ export default function AdminView() {
     fname: '',
     lname: '',
     clinicId: 969,
+  })
+
+  const [patientFormData, setPatientFormData] = useState({
+    email: '',
+    password: '',
+    fname: '',
+    lname: '',
+    patientIc: '',
+    dateOfBirth: '',
+    gender: 'Male',
+    emergencyContact: '',
+    emergencyContactPhone: '',
+    medicalHistory: '',
+    allergies: '',
+    bloodType: '',
   })
 
   // Report state
@@ -243,6 +259,98 @@ export default function AdminView() {
       setError(err.message || 'Failed to create admin account')
       setTimeout(() => setError(''), 5000)
     } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreatePatient = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+    setToast(null)
+    setLoading(true)
+
+    try {
+      // Get current session to restore it after creating the new user
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !currentSession) {
+        throw new Error('No active session. Please sign in again.')
+      }
+
+      const currentUserId = currentSession.user.id
+      
+      // Set flag to ignore auth state changes during user creation
+      setOriginalSession(currentSession)
+      setIgnoreAuthChanges(true)
+      
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: patientFormData.email,
+        password: patientFormData.password,
+        options: {
+          emailRedirectTo: window.location.origin + '/auth',
+        },
+      })
+
+      if (authError) throw authError
+      if (!authData.user) throw new Error('Failed to create user in Supabase Auth')
+
+      // Immediately restore the original admin session
+      await supabase.auth.setSession({
+        access_token: currentSession.access_token,
+        refresh_token: currentSession.refresh_token,
+      })
+
+      // Small delay to ensure session is restored before proceeding
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      await adminAPI.createPatient({
+        authUuid: authData.user.id,
+        email: patientFormData.email,
+        fname: patientFormData.fname,
+        lname: patientFormData.lname,
+        role: 'PATIENT',
+        patientIc: patientFormData.patientIc,
+        dateOfBirth: patientFormData.dateOfBirth,
+        gender: patientFormData.gender,
+        emergencyContact: patientFormData.emergencyContact || null,
+        emergencyContactPhone: patientFormData.emergencyContactPhone || null,
+        medicalHistory: patientFormData.medicalHistory || null,
+        allergies: patientFormData.allergies || null,
+        bloodType: patientFormData.bloodType || null,
+      })
+
+      // Show toast notification
+      setToast({
+        message: `Successfully created PATIENT account for ${patientFormData.email}`,
+        type: 'success'
+      })
+      
+      setPatientFormData({
+        email: '',
+        password: '',
+        fname: '',
+        lname: '',
+        patientIc: '',
+        dateOfBirth: '',
+        gender: 'Male',
+        emergencyContact: '',
+        emergencyContactPhone: '',
+        medicalHistory: '',
+        allergies: '',
+        bloodType: '',
+      })
+      setShowCreatePatient(false)
+      await fetchUsers()
+      await fetchPatients()
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to create patient account',
+        type: 'error'
+      })
+    } finally {
+      // Re-enable auth state change handling
+      setIgnoreAuthChanges(false)
       setLoading(false)
     }
   }
@@ -528,6 +636,7 @@ export default function AdminView() {
                     onClick={() => {
                       setShowCreateStaff(!showCreateStaff)
                       setShowCreateAdmin(false)
+                      setShowCreatePatient(false)
                     }}
                     className="btn btn-primary"
                   >
@@ -537,10 +646,21 @@ export default function AdminView() {
                     onClick={() => {
                       setShowCreateAdmin(!showCreateAdmin)
                       setShowCreateStaff(false)
+                      setShowCreatePatient(false)
                     }}
                     className="btn btn-primary"
                   >
                     {showCreateAdmin ? 'Cancel' : '+ Admin'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCreatePatient(!showCreatePatient)
+                      setShowCreateStaff(false)
+                      setShowCreateAdmin(false)
+                    }}
+                    className="btn btn-primary"
+                  >
+                    {showCreatePatient ? 'Cancel' : '+ Patient'}
                   </button>
                   <button onClick={fetchAllData} className="btn btn-secondary">
                     🔄 Refresh All
@@ -744,6 +864,198 @@ export default function AdminView() {
                     </div>
                     <button type="submit" className="btn btn-primary" disabled={loading}>
                       {loading ? 'Creating...' : 'Create Admin Account'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Create Patient Form */}
+              {showCreatePatient && (
+                <div className="section-card">
+                  <h2>Create New Patient Account</h2>
+                  <p className="form-description">
+                    Create a new patient account. Patients can book appointments and view their medical history.
+                  </p>
+                  <form onSubmit={handleCreatePatient} className="create-form">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="patient-fname">First Name</label>
+                        <input
+                          id="patient-fname"
+                          type="text"
+                          value={patientFormData.fname}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, fname: e.target.value })
+                          }
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="patient-lname">Last Name</label>
+                        <input
+                          id="patient-lname"
+                          type="text"
+                          value={patientFormData.lname}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, lname: e.target.value })
+                          }
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="patient-email">Email</label>
+                      <input
+                        id="patient-email"
+                        type="email"
+                        value={patientFormData.email}
+                        onChange={(e) =>
+                          setPatientFormData({ ...patientFormData, email: e.target.value })
+                        }
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="patient-password">Password</label>
+                      <input
+                        id="patient-password"
+                        type="password"
+                        value={patientFormData.password}
+                        onChange={(e) =>
+                          setPatientFormData({ ...patientFormData, password: e.target.value })
+                        }
+                        required
+                        disabled={loading}
+                        minLength={6}
+                      />
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="patient-ic">Patient IC</label>
+                        <input
+                          id="patient-ic"
+                          type="text"
+                          value={patientFormData.patientIc}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, patientIc: e.target.value })
+                          }
+                          required
+                          disabled={loading}
+                          placeholder="e.g., 123456789012"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="patient-dob">Date of Birth</label>
+                        <input
+                          id="patient-dob"
+                          type="date"
+                          value={patientFormData.dateOfBirth}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, dateOfBirth: e.target.value })
+                          }
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="patient-gender">Gender</label>
+                        <select
+                          id="patient-gender"
+                          value={patientFormData.gender}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, gender: e.target.value })
+                          }
+                          required
+                          disabled={loading}
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="patient-emergency-contact">Emergency Contact Name</label>
+                        <input
+                          id="patient-emergency-contact"
+                          type="text"
+                          value={patientFormData.emergencyContact}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, emergencyContact: e.target.value })
+                          }
+                          disabled={loading}
+                          placeholder="Optional"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="patient-emergency-phone">Emergency Contact Phone</label>
+                        <input
+                          id="patient-emergency-phone"
+                          type="tel"
+                          value={patientFormData.emergencyContactPhone}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, emergencyContactPhone: e.target.value })
+                          }
+                          disabled={loading}
+                          placeholder="Optional"
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="patient-blood-type">Blood Type</label>
+                        <select
+                          id="patient-blood-type"
+                          value={patientFormData.bloodType}
+                          onChange={(e) =>
+                            setPatientFormData({ ...patientFormData, bloodType: e.target.value })
+                          }
+                          disabled={loading}
+                        >
+                          <option value="">Select blood type (Optional)</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="patient-allergies">Allergies</label>
+                      <textarea
+                        id="patient-allergies"
+                        value={patientFormData.allergies}
+                        onChange={(e) =>
+                          setPatientFormData({ ...patientFormData, allergies: e.target.value })
+                        }
+                        disabled={loading}
+                        placeholder="List any known allergies (Optional)"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="patient-medical-history">Medical History</label>
+                      <textarea
+                        id="patient-medical-history"
+                        value={patientFormData.medicalHistory}
+                        onChange={(e) =>
+                          setPatientFormData({ ...patientFormData, medicalHistory: e.target.value })
+                        }
+                        disabled={loading}
+                        placeholder="Previous medical conditions, surgeries, etc. (Optional)"
+                        rows={3}
+                      />
+                    </div>
+                    <button type="submit" className="btn btn-primary" disabled={loading}>
+                      {loading ? 'Creating...' : 'Create Patient Account'}
                     </button>
                   </form>
                 </div>
