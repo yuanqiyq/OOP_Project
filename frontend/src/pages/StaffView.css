@@ -62,9 +62,16 @@
 }
 
 .subtitle {
-  color: #666;
-  font-size: 1.1rem;
+  color: var(--teal-primary);
+  font-size: 1rem;
+  font-weight: 600;
   margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  display: inline-block;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.1);
 }
 
 .header-controls {
@@ -353,6 +360,7 @@
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 600;
+  display: inline-block;
 }
 
 .priority-1 {
@@ -537,6 +545,13 @@
 .detail-value {
   color: var(--teal-primary);
   font-weight: 600;
+}
+
+.patient-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
 
 .waiting-checkin-actions {
@@ -956,12 +971,14 @@ body.modal-open {
 }
 
 .btn-primary {
-  background: var(--gradient-primary);
+  background: var(--teal-primary);
   color: #ffffff;
+  border: none;
   box-shadow: 0 6px 20px var(--teal-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
+  background: var(--teal-dark);
   transform: translateY(-3px);
   box-shadow: 0 10px 30px var(--teal-glow);
   filter: brightness(1.05);
@@ -1532,24 +1549,34 @@ body.modal-open {
 }
 
 .modal-close {
-  background: transparent;
-  border: none;
-  color: #666;
-  font-size: 1.5rem;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  font-size: 1.25rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0.5rem;
-  transition: all 0.2s;
-  border-radius: 8px;
-  width: 32px;
-  height: 32px;
+  padding: 0;
+  transition: all 0.3s;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
 }
 
 .modal-close:hover {
-  color: var(--teal-primary);
-  background: var(--gradient-glow);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: rotate(90deg);
+}
+
+.modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .modal-actions {

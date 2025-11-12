@@ -56,6 +56,7 @@ export default function StaffView() {
   // Medical history modal state
   const [showMedicalHistoryModal, setShowMedicalHistoryModal] = useState(false)
   const [selectedPatientForHistory, setSelectedPatientForHistory] = useState(null)
+  const [selectedPatientDetails, setSelectedPatientDetails] = useState(null)
   const [patientAppointmentsHistory, setPatientAppointmentsHistory] = useState([])
   const [expandedMedicalHistoryAppointmentId, setExpandedMedicalHistoryAppointmentId] = useState(null)
   
@@ -133,6 +134,7 @@ export default function StaffView() {
         if (showMedicalHistoryModal) {
           setShowMedicalHistoryModal(false)
           setSelectedPatientForHistory(null)
+          setSelectedPatientDetails(null)
           setPatientAppointmentsHistory([])
         }
         if (showTreatmentSummaryModal) {
@@ -661,7 +663,15 @@ export default function StaffView() {
     try {
       setLoading(true)
       setSelectedPatientForHistory(patientId)
-      const history = await appointmentAPI.getByPatientId(patientId)
+      
+      // Fetch patient details and appointment history in parallel
+      const [patientDetails, history] = await Promise.all([
+        adminAPI.getPatientById(patientId).catch(() => null), // Don't fail if patient fetch fails
+        appointmentAPI.getByPatientId(patientId)
+      ])
+      
+      setSelectedPatientDetails(patientDetails)
+      
       // Filter to only show COMPLETED appointments
       const completedHistory = (history || []).filter(apt => {
         const status = apt.apptStatus?.toUpperCase() || ''
@@ -676,6 +686,7 @@ export default function StaffView() {
       setShowMedicalHistoryModal(true)
     } catch (err) {
       showToast(err.message || 'Failed to load medical history', 'error')
+      console.error('Error loading medical history:', err)
     } finally {
       setLoading(false)
     }
@@ -1265,19 +1276,6 @@ export default function StaffView() {
                     {clinicName || `Clinic ID: ${clinicId}`}
                   </p>
                 </div>
-                <div className="header-controls">
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={autoRefresh}
-                      onChange={(e) => setAutoRefresh(e.target.checked)}
-                    />
-                    <span>Auto Refresh</span>
-                  </label>
-                  <button onClick={() => fetchQueue(true)} className="btn btn-secondary">
-                    🔄 Refresh
-                  </button>
-                </div>
               </div>
 
               {/* Currently Serving */}
@@ -1299,7 +1297,7 @@ export default function StaffView() {
                         style={{ marginTop: '1rem', cursor: loading ? 'not-allowed' : 'pointer' }}
                         type="button"
                       >
-                        📞 Call Next Patient
+                        Call Next Patient
                       </button>
                     ) : (
                       <p style={{ marginTop: '1rem', color: '#666', fontSize: '0.9rem' }}>
@@ -1341,7 +1339,7 @@ export default function StaffView() {
                           style={{ marginLeft: '0.5rem', cursor: loading ? 'not-allowed' : 'pointer' }}
                           type="button"
                         >
-                          📞 Call Next
+                          Call Next
                         </button>
                       ) : null}
                     </div>
@@ -1373,9 +1371,6 @@ export default function StaffView() {
                         <div className="queue-details-enhanced">
                           <div className="queue-header">
                             <h3>Appointment #{entry.appointmentId}</h3>
-                            <span className={`priority-badge priority-${entry.priority}`}>
-                              {getPriorityLabel(entry.priority)}
-                            </span>
                           </div>
                           <div className="queue-info-grid">
                             <div className="info-item">
@@ -1383,8 +1378,12 @@ export default function StaffView() {
                               <span className="info-value">{entry.patientName || 'N/A'}</span>
                             </div>
                             <div className="info-item">
-                              <span className="info-label">Status:</span>
-                              <span className="info-value">{entry.status}</span>
+                              <span className="info-label">Priority:</span>
+                              <span className="info-value">
+                                <span className={`priority-badge priority-${entry.priority}`}>
+                                  {getPriorityLabel(entry.priority)}
+                                </span>
+                              </span>
                             </div>
                             <div className="info-item">
                               <span className="info-label">Check-in:</span>
@@ -1405,12 +1404,41 @@ export default function StaffView() {
                             disabled={loading}
                             title="Call this patient now"
                           >
-                            📞 Call
+                            Call
                           </button>
                           <button
-                            onClick={() => fetchQueueHistory(entry.appointmentId)}
+                            onClick={async (e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              
+                              try {
+                                // Get patientId from queue entry, or from appointments array, or fetch appointment
+                                let patientId = entry.patientId
+                                
+                                if (!patientId) {
+                                  const appointment = appointments.find(apt => apt.appointmentId === entry.appointmentId)
+                                  patientId = appointment?.patientId
+                                }
+                                
+                                // If still not found, fetch the appointment
+                                if (!patientId && entry.appointmentId) {
+                                  const appointment = await appointmentAPI.getById(entry.appointmentId)
+                                  patientId = appointment?.patientId
+                                }
+                                
+                                if (patientId) {
+                                  openMedicalHistoryModal(patientId)
+                                } else {
+                                  showToast('Patient ID not found for this appointment', 'error')
+                                }
+                              } catch (err) {
+                                console.error('Error loading patient history:', err)
+                                showToast(err.message || 'Failed to load patient information', 'error')
+                              }
+                            }}
                             className="btn btn-outline"
                             disabled={loading}
+                            title="View patient medical history"
                           >
                             📋 History
                           </button>
@@ -2183,105 +2211,6 @@ export default function StaffView() {
                 </div>
               )}
 
-              {/* Medical History Modal */}
-              {showMedicalHistoryModal && selectedPatientForHistory && (() => {
-                const patient = patients.find(p => p.patientId === selectedPatientForHistory || p.userId === selectedPatientForHistory)
-                const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${selectedPatientForHistory}`
-                
-                return (
-                  <div className="modal-overlay" onClick={() => {
-                    if (!loading) {
-                      setShowMedicalHistoryModal(false)
-                      setSelectedPatientForHistory(null)
-                      setPatientAppointmentsHistory([])
-                      setExpandedMedicalHistoryAppointmentId(null)
-                    }
-                  }}>
-                    <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
-                      <div className="modal-header">
-                        <div>
-                          <h2>Medical History</h2>
-                          <p className="subtitle" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{patientName}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (!loading) {
-                              setShowMedicalHistoryModal(false)
-                              setSelectedPatientForHistory(null)
-                              setPatientAppointmentsHistory([])
-                              setExpandedMedicalHistoryAppointmentId(null)
-                            }
-                          }}
-                          className="btn-close"
-                          disabled={loading}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <div className="modal-body">
-                      {loading ? (
-                        <div className="loading">Loading medical history...</div>
-                      ) : patientAppointmentsHistory.length === 0 ? (
-                        <div className="empty-state">No completed appointments found for this patient</div>
-                      ) : (
-                        <div className="medical-history-list">
-                          {patientAppointmentsHistory.map((apt) => {
-                            const doctor = doctors.find(d => d.id === apt.doctorId)
-                            const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
-                            const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
-                            const isExpanded = expandedMedicalHistoryAppointmentId === apt.appointmentId
-                            
-                            return (
-                              <div 
-                                key={apt.appointmentId} 
-                                className={`medical-history-item ${isExpanded ? 'expanded' : ''}`}
-                                style={{ cursor: 'pointer' }}
-                                onClick={() => {
-                                  setExpandedMedicalHistoryAppointmentId(
-                                    isExpanded ? null : apt.appointmentId
-                                  )
-                                }}
-                              >
-                                <div className="medical-history-header">
-                                  <div>
-                                    <h3>Appointment #{apt.appointmentId}</h3>
-                                    <p className="medical-history-date">{formattedDate}, {formattedTime}</p>
-                                    <p className="medical-history-doctor">Doctor: {doctorName}</p>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
-                                      {apt.apptStatus || 'PENDING'}
-                                    </span>
-                                    <span style={{ fontSize: '1.2rem', color: '#666' }}>
-                                      {isExpanded ? '▼' : '▶'}
-                                    </span>
-                                  </div>
-                                </div>
-                                {isExpanded && (
-                                  <div className="treatment-summary-section">
-                                    {apt.treatmentSummary ? (
-                                      <>
-                                        <h4>Treatment Summary</h4>
-                                        <div className="treatment-summary-content">
-                                          {apt.treatmentSummary}
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
-
               {/* Treatment Summary Modal */}
               {showTreatmentSummaryModal && selectedAppointmentForSummary && (() => {
                 const patient = patients.find(p => p.patientId === selectedAppointmentForSummary.patientId || p.userId === selectedAppointmentForSummary.patientId)
@@ -2362,22 +2291,6 @@ export default function StaffView() {
                 <h1>Doctors</h1>
                 <div className="header-controls">
                   <p className="subtitle">{clinicName || `Clinic ID: ${clinicId}`}</p>
-                  <button onClick={() => {
-                    // Recalculate filled days when opening add modal
-                    const filled = new Set()
-                    doctors.forEach(doctor => {
-                      if (doctor.shiftDays && doctor.shiftDays.length > 0) {
-                        doctor.shiftDays.forEach(day => filled.add(day))
-                      }
-                    })
-                    setFilledDays(filled)
-                    setShowAddDoctorModal(true)
-                  }} className="btn btn-primary">
-                    + Add Doctor
-                  </button>
-                  <button onClick={fetchDoctors} className="btn btn-secondary">
-                    Refresh
-                  </button>
                 </div>
               </div>
 
@@ -2390,13 +2303,6 @@ export default function StaffView() {
                 ) : doctors.length === 0 ? (
                   <div className="empty-state">
                     <p>No doctors found for this clinic</p>
-                    <button onClick={() => {
-                      // No doctors exist, so no days are filled
-                      setFilledDays(new Set())
-                      setShowAddDoctorModal(true)
-                    }} className="btn btn-primary">
-                      Add First Doctor
-                    </button>
                   </div>
                 ) : (
                   <div className="doctors-grid">
@@ -2407,10 +2313,6 @@ export default function StaffView() {
                           <span className="doctor-id">ID: {doctor.id}</span>
                         </div>
                         <div className="doctor-details">
-                          <div className="detail-item">
-                            <span className="detail-label">Clinic ID:</span>
-                            <span className="detail-value">{doctor.assignedClinic}</span>
-                          </div>
                           {doctor.shiftDays && doctor.shiftDays.length > 0 ? (
                             <div className="doctor-shifts">
                               <span className="detail-label">Shift Days:</span>
@@ -2430,188 +2332,11 @@ export default function StaffView() {
                             <p className="no-shifts">No shift days assigned</p>
                           )}
                         </div>
-                        <div className="doctor-actions">
-                          <button
-                            onClick={() => handleEditDoctor(doctor)}
-                            className="btn btn-secondary btn-sm"
-                            disabled={loading}
-                          >
-                            ✏️ Edit
-                          </button>
-                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-
-              {/* Edit Doctor Modal */}
-              {showEditDoctorModal && editingDoctor && (
-                <div className="modal-overlay" onClick={() => {
-                  setShowEditDoctorModal(false)
-                  setEditingDoctor(null)
-                }}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                    <div className="modal-header">
-                      <h2>Edit Doctor</h2>
-                      <button className="modal-close" onClick={() => {
-                        setShowEditDoctorModal(false)
-                        setEditingDoctor(null)
-                      }}>×</button>
-                    </div>
-                    <div className="modal-body">
-                      <div className="form-group">
-                        <label>First Name *</label>
-                        <input
-                          type="text"
-                          value={editingDoctor.fname}
-                          onChange={(e) => setEditingDoctor({ ...editingDoctor, fname: e.target.value })}
-                          className="input-sm"
-                          placeholder="Enter first name"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Last Name *</label>
-                        <input
-                          type="text"
-                          value={editingDoctor.lname}
-                          onChange={(e) => setEditingDoctor({ ...editingDoctor, lname: e.target.value })}
-                          className="input-sm"
-                          placeholder="Enter last name"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Shift Days</label>
-                        <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors. Leave empty if no shifts assigned.</p>
-                        <div className="shift-days-selector">
-                          {[1, 2, 3, 4, 5, 6, 7].map(day => {
-                            const isFilled = filledDays.has(day)
-                            const isSelected = editingDoctor.shiftDays.includes(day)
-                            return (
-                              <button
-                                key={day}
-                                type="button"
-                                className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
-                                onClick={() => handleDayToggle(day, true)}
-                                disabled={isFilled}
-                                title={isFilled ? `${getDayFullName(day)} is already assigned` : `${getDayFullName(day)} - Click to toggle`}
-                              >
-                                <span className="day-label">{getDayLabel(day)}</span>
-                                <span className="day-full">{getDayFullName(day)}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {editingDoctor.shiftDays.length > 0 && (
-                          <div className="selected-days-info">
-                            <p>Selected: {editingDoctor.shiftDays.map(d => getDayFullName(d)).join(', ')}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="modal-actions">
-                        <button
-                          onClick={updateDoctor}
-                          className="btn btn-primary"
-                          disabled={loading || !editingDoctor.fname || !editingDoctor.lname}
-                        >
-                          {loading ? 'Updating...' : 'Update Doctor'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowEditDoctorModal(false)
-                            setEditingDoctor(null)
-                          }}
-                          className="btn btn-secondary"
-                          disabled={loading}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Add Doctor Modal */}
-              {showAddDoctorModal && (
-                <div className="modal-overlay" onClick={() => setShowAddDoctorModal(false)}>
-                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                    <div className="modal-header">
-                      <h2>Add New Doctor</h2>
-                      <button className="modal-close" onClick={() => setShowAddDoctorModal(false)}>×</button>
-                    </div>
-                    <div className="modal-body">
-                      <div className="form-group">
-                        <label>First Name *</label>
-                        <input
-                          type="text"
-                          value={newDoctor.fname}
-                          onChange={(e) => setNewDoctor({ ...newDoctor, fname: e.target.value })}
-                          className="input-sm"
-                          placeholder="Enter first name"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Last Name *</label>
-                        <input
-                          type="text"
-                          value={newDoctor.lname}
-                          onChange={(e) => setNewDoctor({ ...newDoctor, lname: e.target.value })}
-                          className="input-sm"
-                          placeholder="Enter last name"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Shift Days</label>
-                        <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors. Leave empty if no shifts assigned.</p>
-                        <div className="shift-days-selector">
-                          {[1, 2, 3, 4, 5, 6, 7].map(day => {
-                            const isFilled = filledDays.has(day)
-                            const isSelected = newDoctor.shiftDays.includes(day)
-                            return (
-                              <button
-                                key={day}
-                                type="button"
-                                className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
-                                onClick={() => handleDayToggle(day)}
-                                disabled={isFilled}
-                                title={isFilled ? `${getDayFullName(day)} is already assigned` : `${getDayFullName(day)} - Click to toggle`}
-                              >
-                                <span className="day-label">{getDayLabel(day)}</span>
-                                <span className="day-full">{getDayFullName(day)}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                        {newDoctor.shiftDays.length > 0 && (
-                          <div className="selected-days-info">
-                            <p>Selected: {newDoctor.shiftDays.map(d => getDayFullName(d)).join(', ')}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="modal-actions">
-                        <button
-                          onClick={createDoctor}
-                          className="btn btn-primary"
-                          disabled={loading || !newDoctor.fname || !newDoctor.lname}
-                        >
-                          {loading ? 'Creating...' : 'Create Doctor'}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowAddDoctorModal(false)
-                            setNewDoctor({ fname: '', lname: '', shiftDays: [] })
-                          }}
-                          className="btn btn-secondary"
-                          disabled={loading}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </>
           )}
 
@@ -2976,6 +2701,213 @@ export default function StaffView() {
               </div>
             </div>
           )}
+
+          {/* Medical History Modal - Accessible from all views */}
+          {showMedicalHistoryModal && selectedPatientForHistory && (() => {
+            const patient = selectedPatientDetails || patients.find(p => p.patientId === selectedPatientForHistory || p.userId === selectedPatientForHistory)
+            const patientName = patient ? `${patient.fname || ''} ${patient.lname || ''}`.trim() : `Patient #${selectedPatientForHistory}`
+            
+            // Format date of birth
+            const formatDateOfBirth = (dob) => {
+              if (!dob) return 'N/A'
+              try {
+                const date = new Date(dob)
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+              } catch {
+                return dob
+              }
+            }
+            
+            return (
+              <div className="modal-overlay" onClick={() => {
+                if (!loading) {
+                  setShowMedicalHistoryModal(false)
+                  setSelectedPatientForHistory(null)
+                  setSelectedPatientDetails(null)
+                  setPatientAppointmentsHistory([])
+                  setExpandedMedicalHistoryAppointmentId(null)
+                }
+              }}>
+                <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <div>
+                      <h2>Patient Medical History</h2>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (!loading) {
+                          setShowMedicalHistoryModal(false)
+                          setSelectedPatientForHistory(null)
+                          setSelectedPatientDetails(null)
+                          setPatientAppointmentsHistory([])
+                          setExpandedMedicalHistoryAppointmentId(null)
+                        }
+                      }}
+                      className="modal-close"
+                      disabled={loading}
+                      title="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="modal-body">
+                    {loading ? (
+                      <div className="loading">Loading patient information...</div>
+                    ) : (
+                      <>
+                        {/* Patient Information Section */}
+                        {patient && (
+                          <div className="section-card" style={{ marginBottom: '2rem' }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--teal-dark)' }}>Patient Information</h3>
+                            <div className="patient-info-grid">
+                              <div className="info-item">
+                                <span className="info-label">Name:</span>
+                                <span className="info-value">{patientName}</span>
+                              </div>
+                              {patient.patientIc && (
+                                <div className="info-item">
+                                  <span className="info-label">IC Number:</span>
+                                  <span className="info-value">{patient.patientIc}</span>
+                                </div>
+                              )}
+                              {patient.dateOfBirth && (
+                                <div className="info-item">
+                                  <span className="info-label">Date of Birth:</span>
+                                  <span className="info-value">{formatDateOfBirth(patient.dateOfBirth)}</span>
+                                </div>
+                              )}
+                              {patient.gender && (
+                                <div className="info-item">
+                                  <span className="info-label">Gender:</span>
+                                  <span className="info-value">{patient.gender}</span>
+                                </div>
+                              )}
+                              {patient.bloodType && (
+                                <div className="info-item">
+                                  <span className="info-label">Blood Type:</span>
+                                  <span className="info-value" style={{ fontWeight: '700', color: 'var(--teal-primary)' }}>{patient.bloodType}</span>
+                                </div>
+                              )}
+                              {patient.email && (
+                                <div className="info-item">
+                                  <span className="info-label">Email:</span>
+                                  <span className="info-value">{patient.email}</span>
+                                </div>
+                              )}
+                              {patient.emergencyContact && (
+                                <div className="info-item">
+                                  <span className="info-label">Emergency Contact:</span>
+                                  <span className="info-value">{patient.emergencyContact}</span>
+                                </div>
+                              )}
+                              {patient.emergencyContactPhone && (
+                                <div className="info-item">
+                                  <span className="info-label">Emergency Phone:</span>
+                                  <span className="info-value">{patient.emergencyContactPhone}</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {patient.allergies && (
+                              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(78, 205, 196, 0.2)' }}>
+                                <h4 style={{ marginTop: 0, marginBottom: '0.75rem', color: 'var(--teal-dark)' }}>Allergies</h4>
+                                <div style={{ 
+                                  padding: '1rem', 
+                                  background: 'var(--gradient-glow)', 
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(78, 205, 196, 0.2)',
+                                  color: '#333',
+                                  whiteSpace: 'pre-wrap'
+                                }}>
+                                  {patient.allergies}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {patient.medicalHistory && (
+                              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(78, 205, 196, 0.2)' }}>
+                                <h4 style={{ marginTop: 0, marginBottom: '0.75rem', color: 'var(--teal-dark)' }}>Medical History</h4>
+                                <div style={{ 
+                                  padding: '1rem', 
+                                  background: 'var(--gradient-glow)', 
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(78, 205, 196, 0.2)',
+                                  color: '#333',
+                                  whiteSpace: 'pre-wrap'
+                                }}>
+                                  {patient.medicalHistory}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Appointment History Section */}
+                        <div className="section-card">
+                          <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--teal-dark)' }}>Appointment History</h3>
+                          {patientAppointmentsHistory.length === 0 ? (
+                            <div className="empty-state">No completed appointments found for this patient</div>
+                          ) : (
+                            <div className="medical-history-list">
+                              {patientAppointmentsHistory.map((apt) => {
+                                const doctor = doctors.find(d => d.id === apt.doctorId)
+                                const doctorName = doctor ? `Dr. ${doctor.fname || ''} ${doctor.lname || ''}`.trim() : (apt.doctorId ? `Doctor #${apt.doctorId}` : 'N/A')
+                                const { formattedDate, formattedTime } = formatDateTime(apt.dateTime)
+                                const isExpanded = expandedMedicalHistoryAppointmentId === apt.appointmentId
+                                
+                                return (
+                                  <div 
+                                    key={apt.appointmentId} 
+                                    className={`medical-history-item ${isExpanded ? 'expanded' : ''}`}
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                      setExpandedMedicalHistoryAppointmentId(
+                                        isExpanded ? null : apt.appointmentId
+                                      )
+                                    }}
+                                  >
+                                    <div className="medical-history-header">
+                                      <div>
+                                        <h3>Appointment #{apt.appointmentId}</h3>
+                                        <p className="medical-history-date">{formattedDate}, {formattedTime}</p>
+                                        <p className="medical-history-doctor">Doctor: {doctorName}</p>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <span className={`status-badge status-${apt.apptStatus?.toLowerCase() || 'pending'}`}>
+                                          {apt.apptStatus || 'PENDING'}
+                                        </span>
+                                        <span style={{ fontSize: '1.2rem', color: '#666' }}>
+                                          {isExpanded ? '▼' : '▶'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {isExpanded && (
+                                      <div className="treatment-summary-section">
+                                        {apt.treatmentSummary ? (
+                                          <>
+                                            <h4>Treatment Summary</h4>
+                                            <div className="treatment-summary-content">
+                                              {apt.treatmentSummary}
+                                            </div>
+                                          </>
+                                        ) : (
+                                          <p className="no-treatment-summary">No treatment summary available for this appointment.</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       </div>
     </div>

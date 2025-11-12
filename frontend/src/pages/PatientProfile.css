@@ -185,9 +185,16 @@
 }
 
 .subtitle {
-  color: #666;
-  font-size: 1.1rem;
+  color: var(--teal-primary);
+  font-size: 1rem;
+  font-weight: 600;
   margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  display: inline-block;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.1);
 }
 
 .loading {

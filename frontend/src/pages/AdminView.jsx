@@ -31,6 +31,13 @@ export default function AdminView() {
   const [clinicDoctors, setClinicDoctors] = useState([])
   const [allDoctors, setAllDoctors] = useState([])
   const [newDoctorForm, setNewDoctorForm] = useState({ fname: '', lname: '', assignedClinic: null })
+  // Doctor management state for doctors view
+  const [showAddDoctorModal, setShowAddDoctorModal] = useState(false)
+  const [showEditDoctorModal, setShowEditDoctorModal] = useState(false)
+  const [editingDoctor, setEditingDoctor] = useState(null)
+  const [newDoctor, setNewDoctor] = useState({ fname: '', lname: '', assignedClinic: null, shiftDays: [] })
+  const [filledDays, setFilledDays] = useState(new Set())
+  const [selectedClinicFilter, setSelectedClinicFilter] = useState(null)
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalStaff: 0,
@@ -561,9 +568,180 @@ export default function AdminView() {
     }
   }
 
+  // Helper functions for doctor management
+  const getDayLabel = (day) => {
+    const labels = { 1: 'M', 2: 'T', 3: 'W', 4: 'T', 5: 'F', 6: 'S', 7: 'S' }
+    return labels[day] || day
+  }
+
+  const getDayFullName = (day) => {
+    const names = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' }
+    return names[day] || `Day ${day}`
+  }
+
+  // Fetch doctors for doctors view (filtered by clinic if selected)
+  const fetchDoctorsForView = async () => {
+    try {
+      setLoading(true)
+      let data
+      if (selectedClinicFilter) {
+        data = await doctorAPI.getByClinic(selectedClinicFilter)
+      } else {
+        data = await doctorAPI.getAll()
+      }
+      setDoctors(data || [])
+      // Calculate filled days (excluding the doctor being edited)
+      const filled = new Set()
+      data?.forEach(doctor => {
+        if (doctor.shiftDays && doctor.shiftDays.length > 0 && (!editingDoctor || doctor.id !== editingDoctor.id)) {
+          // Only count filled days for doctors in the same clinic
+          if (!selectedClinicFilter || doctor.assignedClinic === selectedClinicFilter) {
+            doctor.shiftDays.forEach(day => filled.add(day))
+          }
+        }
+      })
+      setFilledDays(filled)
+    } catch (err) {
+      console.error('Failed to fetch doctors', err)
+      setToast({
+        message: err.message || 'Failed to fetch doctors',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle day toggle for shift days
+  const handleDayToggle = (day, isEditMode = false) => {
+    if (filledDays.has(day)) return // Don't allow selecting filled days
+    
+    if (isEditMode && editingDoctor) {
+      setEditingDoctor(prev => {
+        const shiftDays = prev.shiftDays.includes(day)
+          ? prev.shiftDays.filter(d => d !== day)
+          : [...prev.shiftDays, day].sort()
+        return { ...prev, shiftDays }
+      })
+    } else {
+      setNewDoctor(prev => {
+        const shiftDays = prev.shiftDays.includes(day)
+          ? prev.shiftDays.filter(d => d !== day)
+          : [...prev.shiftDays, day].sort()
+        return { ...prev, shiftDays }
+      })
+    }
+  }
+
+  // Handle edit doctor
+  const handleEditDoctor = (doctor) => {
+    setEditingDoctor({ ...doctor, shiftDays: doctor.shiftDays || [] })
+    setShowEditDoctorModal(true)
+    // Recalculate filled days excluding this doctor
+    const filled = new Set()
+    doctors.forEach(d => {
+      if (d.shiftDays && d.id !== doctor.id) {
+        // Only count filled days for doctors in the same clinic
+        if (!selectedClinicFilter || d.assignedClinic === selectedClinicFilter) {
+          d.shiftDays.forEach(day => filled.add(day))
+        }
+      }
+    })
+    setFilledDays(filled)
+  }
+
+  // Create doctor
+  const createDoctor = async () => {
+    if (!newDoctor.fname || !newDoctor.lname) {
+      setToast({
+        message: 'First name and last name are required',
+        type: 'error'
+      })
+      return
+    }
+
+    if (!newDoctor.assignedClinic) {
+      setToast({
+        message: 'Please select a clinic',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setLoading(true)
+      await doctorAPI.create({
+        fname: newDoctor.fname,
+        lname: newDoctor.lname,
+        assignedClinic: newDoctor.assignedClinic,
+        shiftDays: newDoctor.shiftDays.length > 0 ? newDoctor.shiftDays : null
+      })
+      setToast({
+        message: 'Doctor created successfully!',
+        type: 'success'
+      })
+      setShowAddDoctorModal(false)
+      setNewDoctor({ fname: '', lname: '', assignedClinic: null, shiftDays: [] })
+      await fetchDoctorsForView()
+      await fetchDoctors() // Also refresh the main doctors list
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to create doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Update doctor
+  const updateDoctor = async () => {
+    if (!editingDoctor || !editingDoctor.fname || !editingDoctor.lname) {
+      setToast({
+        message: 'First name and last name are required',
+        type: 'error'
+      })
+      return
+    }
+
+    try {
+      setLoading(true)
+      await doctorAPI.update(editingDoctor.id, {
+        fname: editingDoctor.fname,
+        lname: editingDoctor.lname,
+        assignedClinic: editingDoctor.assignedClinic,
+        shiftDays: editingDoctor.shiftDays.length > 0 ? editingDoctor.shiftDays : null
+      })
+      setToast({
+        message: 'Doctor updated successfully!',
+        type: 'success'
+      })
+      setShowEditDoctorModal(false)
+      setEditingDoctor(null)
+      await fetchDoctorsForView()
+      await fetchDoctors() // Also refresh the main doctors list
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to update doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Effect to fetch doctors when clinic filter changes or when entering doctors view
+  useEffect(() => {
+    if (location.pathname.includes('/doctors')) {
+      fetchDoctorsForView()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClinicFilter, location.pathname])
+
   const getCurrentView = () => {
     if (location.pathname.includes('/users')) return 'users'
     if (location.pathname.includes('/clinics')) return 'clinics'
+    if (location.pathname.includes('/doctors')) return 'doctors'
     if (location.pathname.includes('/reports')) return 'reports'
     if (location.pathname.includes('/settings')) return 'settings'
     return 'dashboard'
@@ -1435,6 +1613,336 @@ export default function AdminView() {
               </>
             )
           })()}
+
+          {currentView === 'doctors' && (
+            <>
+              <div className="page-header">
+                <h1>Doctors</h1>
+                <div className="header-controls">
+                  <div className="form-group" style={{ margin: 0, minWidth: '250px' }}>
+                    <label htmlFor="clinic-filter" style={{ marginBottom: '0.5rem', display: 'block' }}>Filter by Clinic</label>
+                    <select
+                      id="clinic-filter"
+                      value={selectedClinicFilter || ''}
+                      onChange={(e) => setSelectedClinicFilter(e.target.value ? parseInt(e.target.value) : null)}
+                      className="form-input"
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">All Clinics</option>
+                      {clinics.map(clinic => (
+                        <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={() => {
+                    // Recalculate filled days when opening add modal
+                    const filled = new Set()
+                    doctors.forEach(doctor => {
+                      if (doctor.shiftDays && doctor.shiftDays.length > 0) {
+                        // Only count filled days for doctors in the same clinic
+                        if (!selectedClinicFilter || doctor.assignedClinic === selectedClinicFilter) {
+                          doctor.shiftDays.forEach(day => filled.add(day))
+                        }
+                      }
+                    })
+                    setFilledDays(filled)
+                    setNewDoctor({ fname: '', lname: '', assignedClinic: selectedClinicFilter || null, shiftDays: [] })
+                    setShowAddDoctorModal(true)
+                  }} className="btn btn-primary">
+                    + Add Doctor
+                  </button>
+                  <button onClick={fetchDoctorsForView} className="btn btn-secondary">
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="section-card">
+                <div className="section-header">
+                  <h2>
+                    {selectedClinicFilter 
+                      ? `Doctors at ${clinics.find(c => c.id === selectedClinicFilter)?.name || 'Selected Clinic'} (${doctors.length})`
+                      : `All Doctors (${doctors.length})`}
+                  </h2>
+                </div>
+                {loading ? (
+                  <div className="loading">Loading...</div>
+                ) : doctors.length === 0 ? (
+                  <div className="empty-state">
+                    <p>
+                      {selectedClinicFilter 
+                        ? 'No doctors found for the selected clinic'
+                        : 'No doctors found'}
+                    </p>
+                    <button onClick={() => {
+                      setFilledDays(new Set())
+                      setNewDoctor({ fname: '', lname: '', assignedClinic: selectedClinicFilter || null, shiftDays: [] })
+                      setShowAddDoctorModal(true)
+                    }} className="btn btn-primary">
+                      Add First Doctor
+                    </button>
+                  </div>
+                ) : (
+                  <div className="doctors-grid">
+                    {doctors.map((doctor) => (
+                      <div key={doctor.id} className="doctor-card">
+                        <div className="doctor-header">
+                          <h3>Dr. {doctor.fname} {doctor.lname}</h3>
+                          <span className="doctor-id">ID: {doctor.id}</span>
+                        </div>
+                        <div className="doctor-details">
+                          <div className="detail-item">
+                            <span className="detail-label">Clinic:</span>
+                            <span className="detail-value">
+                              {doctor.assignedClinic 
+                                ? clinics.find(c => c.id === doctor.assignedClinic)?.name || `Clinic ID: ${doctor.assignedClinic}`
+                                : 'Unassigned'}
+                            </span>
+                          </div>
+                          {doctor.shiftDays && doctor.shiftDays.length > 0 ? (
+                            <div className="doctor-shifts">
+                              <span className="detail-label">Shift Days:</span>
+                              <div className="shift-days-display">
+                                {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                                  <span
+                                    key={day}
+                                    className={`shift-day-badge ${doctor.shiftDays.includes(day) ? 'active' : 'inactive'}`}
+                                    title={getDayFullName(day)}
+                                  >
+                                    {getDayLabel(day)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="no-shifts">No shift days assigned</p>
+                          )}
+                        </div>
+                        <div className="doctor-actions">
+                          <button
+                            onClick={() => handleEditDoctor(doctor)}
+                            className="btn btn-secondary btn-sm"
+                            disabled={loading}
+                          >
+                            ✏️ Edit
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Edit Doctor Modal */}
+              {showEditDoctorModal && editingDoctor && (
+                <div className="modal-overlay" onClick={() => {
+                  setShowEditDoctorModal(false)
+                  setEditingDoctor(null)
+                }}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Edit Doctor</h2>
+                      <button className="modal-close" onClick={() => {
+                        setShowEditDoctorModal(false)
+                        setEditingDoctor(null)
+                      }}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>First Name *</label>
+                        <input
+                          type="text"
+                          value={editingDoctor.fname}
+                          onChange={(e) => setEditingDoctor({ ...editingDoctor, fname: e.target.value })}
+                          className="input-sm"
+                          placeholder="Enter first name"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Last Name *</label>
+                        <input
+                          type="text"
+                          value={editingDoctor.lname}
+                          onChange={(e) => setEditingDoctor({ ...editingDoctor, lname: e.target.value })}
+                          className="input-sm"
+                          placeholder="Enter last name"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Clinic *</label>
+                        <select
+                          value={editingDoctor.assignedClinic || ''}
+                          onChange={(e) => setEditingDoctor({ ...editingDoctor, assignedClinic: e.target.value ? parseInt(e.target.value) : null })}
+                          className="input-sm"
+                        >
+                          <option value="">Unassigned</option>
+                          {clinics.map(clinic => (
+                            <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Shift Days</label>
+                        <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors in the same clinic. Leave empty if no shifts assigned.</p>
+                        <div className="shift-days-selector">
+                          {[1, 2, 3, 4, 5, 6, 7].map(day => {
+                            const isFilled = filledDays.has(day)
+                            const isSelected = editingDoctor.shiftDays.includes(day)
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
+                                onClick={() => handleDayToggle(day, true)}
+                                disabled={isFilled}
+                                title={isFilled ? `${getDayFullName(day)} is already assigned` : `${getDayFullName(day)} - Click to toggle`}
+                              >
+                                <span className="day-label">{getDayLabel(day)}</span>
+                                <span className="day-full">{getDayFullName(day)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {editingDoctor.shiftDays.length > 0 && (
+                          <div className="selected-days-info">
+                            <p>Selected: {editingDoctor.shiftDays.map(d => getDayFullName(d)).join(', ')}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          onClick={updateDoctor}
+                          className="btn btn-primary"
+                          disabled={loading || !editingDoctor.fname || !editingDoctor.lname}
+                        >
+                          {loading ? 'Updating...' : 'Update Doctor'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowEditDoctorModal(false)
+                            setEditingDoctor(null)
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Add Doctor Modal */}
+              {showAddDoctorModal && (
+                <div className="modal-overlay" onClick={() => setShowAddDoctorModal(false)}>
+                  <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Add New Doctor</h2>
+                      <button className="modal-close" onClick={() => setShowAddDoctorModal(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>First Name *</label>
+                        <input
+                          type="text"
+                          value={newDoctor.fname}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, fname: e.target.value })}
+                          className="input-sm"
+                          placeholder="Enter first name"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Last Name *</label>
+                        <input
+                          type="text"
+                          value={newDoctor.lname}
+                          onChange={(e) => setNewDoctor({ ...newDoctor, lname: e.target.value })}
+                          className="input-sm"
+                          placeholder="Enter last name"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Clinic *</label>
+                        <select
+                          value={newDoctor.assignedClinic || ''}
+                          onChange={(e) => {
+                            const clinicId = e.target.value ? parseInt(e.target.value) : null
+                            setNewDoctor({ ...newDoctor, assignedClinic: clinicId })
+                            // Recalculate filled days for the selected clinic
+                            if (clinicId) {
+                              const filled = new Set()
+                              doctors.forEach(doctor => {
+                                if (doctor.shiftDays && doctor.assignedClinic === clinicId) {
+                                  doctor.shiftDays.forEach(day => filled.add(day))
+                                }
+                              })
+                              setFilledDays(filled)
+                            } else {
+                              setFilledDays(new Set())
+                            }
+                          }}
+                          className="input-sm"
+                        >
+                          <option value="">Select a clinic</option>
+                          {clinics.map(clinic => (
+                            <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Shift Days</label>
+                        <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors in the same clinic. Leave empty if no shifts assigned.</p>
+                        <div className="shift-days-selector">
+                          {[1, 2, 3, 4, 5, 6, 7].map(day => {
+                            const isFilled = filledDays.has(day)
+                            const isSelected = newDoctor.shiftDays.includes(day)
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
+                                onClick={() => handleDayToggle(day)}
+                                disabled={isFilled || !newDoctor.assignedClinic}
+                                title={!newDoctor.assignedClinic ? 'Please select a clinic first' : isFilled ? `${getDayFullName(day)} is already assigned` : `${getDayFullName(day)} - Click to toggle`}
+                              >
+                                <span className="day-label">{getDayLabel(day)}</span>
+                                <span className="day-full">{getDayFullName(day)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {newDoctor.shiftDays.length > 0 && (
+                          <div className="selected-days-info">
+                            <p>Selected: {newDoctor.shiftDays.map(d => getDayFullName(d)).join(', ')}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="modal-actions">
+                        <button
+                          onClick={createDoctor}
+                          className="btn btn-primary"
+                          disabled={loading || !newDoctor.fname || !newDoctor.lname || !newDoctor.assignedClinic}
+                        >
+                          {loading ? 'Creating...' : 'Create Doctor'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowAddDoctorModal(false)
+                            setNewDoctor({ fname: '', lname: '', assignedClinic: null, shiftDays: [] })
+                          }}
+                          className="btn btn-secondary"
+                          disabled={loading}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {currentView === 'reports' && (
             <>

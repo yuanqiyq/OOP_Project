@@ -63,6 +63,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
     { id: 'dashboard', label: 'Dashboard', icon: '📊', path: '/admin' },
     { id: 'users', label: 'Users', icon: '👥', path: '/admin/users' },
     { id: 'clinics', label: 'Clinics', icon: '🏥', path: '/admin/clinics' },
+    { id: 'doctors', label: 'Doctors', icon: '👨‍⚕️', path: '/admin/doctors' },
     { id: 'reports', label: 'Reports', icon: '📈', path: '/admin/reports' },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/admin/settings' },
   ]
@@ -98,7 +99,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
       (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
        currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/settings') && !currentPath.includes('/medical-history') ||
        currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') && !currentPath.includes('/display') && !currentPath.includes('/reports') ||
-       currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
+       currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/doctors') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
       (item.id === 'appointments' && (currentPath.startsWith('/patient/appointments') || currentPath.startsWith('/patient/book'))) ||
       (item.id === 'medical-history' && currentPath.startsWith('/patient/medical-history')) ||
       (item.path !== '/patient' && item.path !== '/staff' && item.path !== '/admin' && currentPath.startsWith(item.path))
