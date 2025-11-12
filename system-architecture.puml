@@ -1,0 +1,228 @@
+@startuml System_Architecture
+!theme plain
+skinparam linetype ortho
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+title SingHealth Clinic Queue & Appointment Management System - Overall Architecture
+
+' Define actors
+actor Patient as patient
+actor Staff as staff
+actor Admin as admin
+
+' Frontend Layer
+package "Frontend Layer\n(React 19 + Vite)" {
+    component "Patient View" as patientView {
+        [Appointment Booking]
+        [Queue Check-in]
+        [Profile Management]
+    }
+    
+    component "Staff View" as staffView {
+        [Queue Management]
+        [Appointment Tracking]
+        [Patient Check-in]
+    }
+    
+    component "Admin View" as adminView {
+        [User Management]
+        [System Reports]
+        [Clinic Configuration]
+    }
+    
+    component "Shared Components" as shared {
+        [AuthContext]
+        [ProtectedRoute]
+        [Navbar]
+        [Toast Notifications]
+    }
+    
+    component "API Layer" as apiLayer {
+        [api.js - Centralized HTTP Client]
+    }
+}
+
+' Backend Layer
+package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
+    
+    ' Presentation Layer
+    package "Presentation Layer\n(Controllers)" as controllers {
+        [AppointmentController] as apptCtrl
+        [QueueController] as queueCtrl
+        [AdminController] as adminCtrl
+        [UserController] as userCtrl
+        [NotificationController] as notifCtrl
+        [ClinicController] as clinicCtrl
+        [DoctorController] as doctorCtrl
+        [ReportController] as reportCtrl
+        [HealthController] as healthCtrl
+    }
+    
+    ' Business Logic Layer
+    package "Business Logic Layer\n(Services)" as services {
+        [AppointmentService] as apptSvc
+        [QueueService] as queueSvc
+        [NotificationService] as notifSvc
+        [PatientService] as patientSvc
+        [StaffService] as staffSvc
+        [UserService] as userSvc
+        [ClinicService] as clinicSvc
+        [DoctorService] as doctorSvc
+        [ReportService] as reportSvc
+    }
+    
+    ' Data Access Layer
+    package "Data Access Layer\n(Repositories)" as repositories {
+        [AppointmentRepository] as apptRepo
+        [QueueRepository] as queueRepo
+        [PatientRepository] as patientRepo
+        [StaffRepository] as staffRepo
+        [UserRepository] as userRepo
+        [ClinicRepository] as clinicRepo
+        [DoctorRepository] as doctorRepo
+    }
+    
+    ' Configuration
+    package "Configuration" as config {
+        [SwaggerConfig]
+        [SendGridConfig]
+    }
+}
+
+' Database Layer
+database "PostgreSQL Database\n(Supabase - AWS Singapore)" as db {
+    frame "Tables" {
+        [User]
+        [Patient]
+        [Staff]
+        [Doctor]
+        [Clinic]
+        [Appointment]
+        [QueueLog]
+        [Reports]
+    }
+}
+
+' External Services
+cloud "External Services" {
+    component "Supabase Auth\n(JWT Authentication)" as supabaseAuth
+    component "SendGrid\n(Email Notifications)" as sendgrid
+}
+
+' Actor Connections
+patient --> patientView
+staff --> staffView
+admin --> adminView
+
+' Frontend Internal Connections
+patientView --> shared
+staffView --> shared
+adminView --> shared
+patientView --> apiLayer
+staffView --> apiLayer
+adminView --> apiLayer
+shared --> apiLayer
+shared --> supabaseAuth : "Auth Requests"
+
+' Frontend to Backend
+apiLayer --> controllers : "HTTP/REST\n/api/*\nPort 8080"
+
+' Controller to Service Layer
+apptCtrl --> apptSvc
+queueCtrl --> queueSvc
+adminCtrl --> patientSvc
+adminCtrl --> staffSvc
+userCtrl --> userSvc
+notifCtrl --> notifSvc
+clinicCtrl --> clinicSvc
+doctorCtrl --> doctorSvc
+reportCtrl --> reportSvc
+
+' Service to Repository Layer
+apptSvc --> apptRepo
+apptSvc --> notifSvc
+queueSvc --> queueRepo
+queueSvc --> apptRepo
+queueSvc --> notifSvc
+patientSvc --> patientRepo
+staffSvc --> staffRepo
+userSvc --> userRepo
+clinicSvc --> clinicRepo
+doctorSvc --> doctorRepo
+notifSvc --> sendgrid : "Email API"
+
+' Repository to Database
+apptRepo --> db : "JPA/Hibernate\nJDBC"
+queueRepo --> db
+patientRepo --> db
+staffRepo --> db
+userRepo --> db
+clinicRepo --> db
+doctorRepo --> db
+reportSvc --> db : "Query Reports"
+
+' Backend to External Services
+supabaseAuth --> db : "Auth Users Table"
+
+' Notes
+note right of controllers
+  RESTful API Endpoints
+  - HTTP Request Handling
+  - Input Validation
+  - Error Handling
+  - Swagger Documentation
+end note
+
+note right of services
+  Business Logic
+  - Transaction Management
+  - Validation Rules
+  - DTO Conversion
+  - Queue Algorithm
+  - Double-Booking Prevention
+end note
+
+note right of repositories
+  Data Access
+  - Spring Data JPA
+  - Custom Queries
+  - Entity Management
+  - Connection Pooling (HikariCP)
+end note
+
+note left of db
+  Database Schema
+  - JOINED Inheritance (User → Patient, Staff)
+  - 8 Main Tables
+  - JSONB for Complex Data
+  - Indexes for Performance
+end note
+
+note bottom of sendgrid
+  Email Notifications:
+  - Appointment Confirmation
+  - Queue Position ("3 away")
+  - Your Turn Alert
+end note
+
+note bottom of supabaseAuth
+  Authentication:
+  - JWT Tokens
+  - Session Management
+  - User Registration
+  - Password Reset
+end note
+
+' Legend
+legend bottom right
+  |= Layer |= Responsibility |
+  | Frontend | User Interface & Client-side Logic |
+  | Controllers | HTTP/REST API Endpoints |
+  | Services | Business Logic & Transactions |
+  | Repositories | Database Operations |
+  | Database | Data Persistence |
+  | External | Authentication & Email Services |
+endlegend
+
+@enduml

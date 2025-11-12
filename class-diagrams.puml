@@ -1,0 +1,677 @@
+@startuml Class_Diagrams_Complete
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam backgroundColor #FEFEFE
+skinparam shadowing false
+skinparam linetype ortho
+
+title SingHealth Clinic Queue & Appointment Management System - Complete Class Diagram
+
+' ==================== ENTITY CLASSES ====================
+
+package "Entity Models" <<Rectangle>> {
+    
+    ' User Entity (Base Class)
+    abstract class User {
+        - userId: Long
+        - authUuid: UUID
+        - email: String
+        - fname: String
+        - lname: String
+        - role: String
+        - createdAt: LocalDateTime
+        __
+        + User()
+        + User(Long, UUID, String, String, String, String, LocalDateTime)
+        + getUserId(): Long
+        + setUserId(Long): void
+        + getAuthUuid(): UUID
+        + setAuthUuid(UUID): void
+        + getEmail(): String
+        + setEmail(String): void
+        + getFname(): String
+        + setFname(String): void
+        + getLname(): String
+        + setLname(String): void
+        + getRole(): String
+        + setRole(String): void
+        + getCreatedAt(): LocalDateTime
+        + setCreatedAt(LocalDateTime): void
+    }
+    
+    ' Patient Entity
+    class Patient {
+        - patientIc: String
+        - dateOfBirth: LocalDate
+        - gender: String
+        - emergencyContact: String
+        - emergencyContactPhone: String
+        - medicalHistory: String
+        - allergies: String
+        - bloodType: String
+        __
+        + Patient()
+        + Patient(String, LocalDate, String, String, String, String, String, String)
+        + getPatientIc(): String
+        + setPatientIc(String): void
+        + getDateOfBirth(): LocalDate
+        + setDateOfBirth(LocalDate): void
+        + getGender(): String
+        + setGender(String): void
+        + getEmergencyContact(): String
+        + setEmergencyContact(String): void
+        + getEmergencyContactPhone(): String
+        + setEmergencyContactPhone(String): void
+        + getMedicalHistory(): String
+        + setMedicalHistory(String): void
+        + getAllergies(): String
+        + setAllergies(String): void
+        + getBloodType(): String
+        + setBloodType(String): void
+    }
+    
+    ' Staff Entity
+    class Staff {
+        - clinic: Clinic
+        __
+        + Staff()
+        + Staff(Clinic)
+        + getClinic(): Clinic
+        + setClinic(Clinic): void
+    }
+    
+    ' Doctor Entity
+    class Doctor {
+        - id: Long
+        - createdAt: LocalDateTime
+        - fname: String
+        - lname: String
+        - assignedClinic: Long
+        - shiftDays: List<Integer>
+        __
+        + Doctor()
+        + Doctor(Long, LocalDateTime, String, String, Long, List<Integer>)
+        + getId(): Long
+        + setId(Long): void
+        + getCreatedAt(): LocalDateTime
+        + setCreatedAt(LocalDateTime): void
+        + getFname(): String
+        + setFname(String): void
+        + getLname(): String
+        + setLname(String): void
+        + getAssignedClinic(): Long
+        + setAssignedClinic(Long): void
+        + getShiftDays(): List<Integer>
+        + setShiftDays(List<Integer>): void
+        # onCreate(): void
+    }
+    
+    ' Clinic Entity
+    class Clinic {
+        - id: Long
+        - name: String
+        - address: String
+        - telephoneNo: String
+        - region: String
+        - area: String
+        - specialty: String
+        - clinicType: ClinicType
+        - pcn: String
+        - ihpClinicId: String
+        - monFriAmStart: LocalTime
+        - monFriAmEnd: LocalTime
+        - monFriPmStart: LocalTime
+        - monFriPmEnd: LocalTime
+        - satAmStart: LocalTime
+        - satAmEnd: LocalTime
+        - sunAmStart: LocalTime
+        - sunAmEnd: LocalTime
+        - phAmStart: LocalTime
+        - phAmEnd: LocalTime
+        - remarks: String
+        - apptIntervalMin: Long
+        - createdAt: LocalDateTime
+        - updatedAt: LocalDateTime
+        __
+        + Clinic()
+        + Clinic(Long, String, String, String, String, String, String, ClinicType, String, String, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, LocalTime, String, Long, LocalDateTime, LocalDateTime)
+        + getId(): Long
+        + setId(Long): void
+        + getName(): String
+        + setName(String): void
+        + getAddress(): String
+        + setAddress(String): void
+        + getTelephoneNo(): String
+        + setTelephoneNo(String): void
+        + getRegion(): String
+        + setRegion(String): void
+        + getArea(): String
+        + setArea(String): void
+        + getSpecialty(): String
+        + setSpecialty(String): void
+        + getClinicType(): ClinicType
+        + setClinicType(ClinicType): void
+        + getPcn(): String
+        + setPcn(String): void
+        + getIhpClinicId(): String
+        + setIhpClinicId(String): void
+        + getApptIntervalMin(): Long
+        + setApptIntervalMin(Long): void
+        + getCreatedAt(): LocalDateTime
+        + setCreatedAt(LocalDateTime): void
+        + getUpdatedAt(): LocalDateTime
+        + setUpdatedAt(LocalDateTime): void
+        # onCreate(): void
+        # onUpdate(): void
+    }
+    
+    ' Appointment Entity
+    class Appointment {
+        - appointmentId: Long
+        - patientId: Long
+        - clinicId: Long
+        - doctorId: Long
+        - dateTime: LocalDateTime
+        - apptStatus: AppointmentStatus
+        - createdAt: LocalDateTime
+        - treatmentSummary: String
+        __
+        + Appointment()
+        + Appointment(Long, Long, LocalDateTime)
+        + getAppointmentId(): Long
+        + setAppointmentId(Long): void
+        + getPatientId(): Long
+        + setPatientId(Long): void
+        + getClinicId(): Long
+        + setClinicId(Long): void
+        + getDoctorId(): Long
+        + setDoctorId(Long): void
+        + getDateTime(): LocalDateTime
+        + setDateTime(LocalDateTime): void
+        + getApptStatus(): AppointmentStatus
+        + setApptStatus(AppointmentStatus): void
+        + getCreatedAt(): LocalDateTime
+        + setCreatedAt(LocalDateTime): void
+        + getTreatmentSummary(): String
+        + setTreatmentSummary(String): void
+        # onCreate(): void
+    }
+    
+    ' QueueLog Entity
+    class QueueLog {
+        {static} + STATUS_IN_QUEUE: String = "IN_QUEUE"
+        {static} + STATUS_CALLED: String = "CALLED"
+        {static} + STATUS_DONE: String = "DONE"
+        {static} + STATUS_MISSED: String = "MISSED"
+        {static} + PRIORITY_NORMAL: int = 1
+        {static} + PRIORITY_ELDERLY: int = 2
+        {static} + PRIORITY_EMERGENCY: int = 3
+        - queueId: Long
+        - clinicId: Long
+        - appointmentId: Long
+        - status: String
+        - priority: Integer
+        - createdAt: LocalDateTime
+        - appointmentStart: LocalDateTime
+        __
+        + QueueLog()
+        + QueueLog(Long, Long, Integer)
+        + QueueLog(Long, Long, Long, String, Integer, LocalDateTime, LocalDateTime)
+        + getQueueId(): Long
+        + setQueueId(Long): void
+        + getClinicId(): Long
+        + setClinicId(Long): void
+        + getAppointmentId(): Long
+        + setAppointmentId(Long): void
+        + getStatus(): String
+        + setStatus(String): void
+        + getPriority(): Integer
+        + setPriority(Integer): void
+        + getCreatedAt(): LocalDateTime
+        + setCreatedAt(LocalDateTime): void
+        + getAppointmentStart(): LocalDateTime
+        + setAppointmentStart(LocalDateTime): void
+        # onCreate(): void
+        {static} + isValidStatus(String): boolean
+        {static} + isValidPriority(Integer): boolean
+        {static} + isValidTransition(String, String): boolean
+    }
+}
+
+' ==================== ENUM CLASSES ====================
+
+package "Enums" <<Rectangle>> {
+    
+    enum AppointmentStatus {
+        SCHEDULED
+        ARRIVED
+        NO_SHOW
+        MISSED
+        CANCELLED
+        COMPLETED
+        __
+        - value: String
+        __
+        - AppointmentStatus(String)
+        + getValue(): String
+        + toString(): String
+        {static} + fromValue(String): AppointmentStatus
+    }
+    
+    enum ClinicType {
+        GP
+        SPECIALIST
+        __
+        - value: String
+        __
+        - ClinicType(String)
+        + getValue(): String
+        + toString(): String
+        {static} + fromValue(String): ClinicType
+    }
+}
+
+' ==================== SERVICE CLASSES ====================
+
+package "Service Layer" <<Rectangle>> {
+    
+    class AppointmentService {
+        - appointmentRepository: AppointmentRepository
+        - notificationService: NotificationService
+        - patientRepository: PatientRepository
+        - clinicRepository: ClinicRepository
+        - doctorRepository: DoctorRepository
+        - {static} DATE_TIME_FORMATTER: DateTimeFormatter
+        __
+        + getAllAppointments(): List<Appointment>
+        + getAppointmentById(Long): Optional<Appointment>
+        + createAppointment(Appointment): Appointment
+        + updateAppointment(Long, AppointmentUpdateDTO): Optional<Appointment>
+        + deleteAppointment(Long): boolean
+        + getAppointmentsByPatientId(Long): List<Appointment>
+        + getAppointmentsByClinicId(Long): List<Appointment>
+        + getAppointmentsByDoctorId(Long): List<Appointment>
+        + getAppointmentsByStatus(String): List<Appointment>
+        + getAppointmentsByPatientIdAndStatus(Long, String): List<Appointment>
+        + getAppointmentsByClinicIdAndStatus(Long, String): List<Appointment>
+        + getAppointmentsByDateRange(LocalDateTime, LocalDateTime): List<Appointment>
+        + getAppointmentsByPatientIdAndDateRange(Long, LocalDateTime, LocalDateTime): List<Appointment>
+        + getAppointmentsByClinicIdAndDateRange(Long, LocalDateTime, LocalDateTime): List<Appointment>
+        + appointmentExistsByPatientIdAndDateTime(Long, LocalDateTime): boolean
+        + appointmentExistsByClinicIdAndDateTime(Long, LocalDateTime): boolean
+        + updateAppointmentStatus(Long, String): Optional<Appointment>
+        + getAppointmentCountForSlot(Long, Long, LocalDateTime): long
+        - sendAppointmentConfirmationNotification(Appointment): void
+        - formatFullName(String, String): String
+    }
+    
+    class QueueService {
+        - queueRepository: QueueRepository
+        - appointmentRepository: AppointmentRepository
+        - eventPublisher: ApplicationEventPublisher
+        - notificationService: NotificationService
+        - patientRepository: PatientRepository
+        - clinicRepository: ClinicRepository
+        - doctorRepository: DoctorRepository
+        - {static} DATE_TIME_FORMATTER: DateTimeFormatter
+        __
+        + checkInPatient(Long, Integer): QueueLog
+        + getClinicQueue(Long): List<QueueLog>
+        + getClinicQueueWithDetails(Long): List<QueueEntryDTO>
+        + getQueuePosition(Long): QueuePositionDTO
+        + markAppointmentDone(Long): QueueLog
+        + updateQueueStatus(Long, String): QueueLog
+        + handleMissedPatientReturn(Long, Integer): QueueLog
+        + callNextQueueNumber(Long): QueueLog
+        + callByAppointmentId(Long): QueueLog
+        + getAppointmentQueueHistory(Long): List<QueueLog>
+        + isAppointmentInQueue(Long): boolean
+        + getCurrentlyServing(Long): Optional<QueueLog>
+        + getQueueCount(Long): long
+        + getMissedQueueEntries(Long): List<QueueLog>
+        - convertToQueueEntryDTO(QueueLog, Integer, Integer): QueueEntryDTO
+        - buildPositionMessage(Integer): String
+        - estimateWaitTime(Integer): Integer
+        - formatFullName(String, String): String
+        - sendYourTurnNotification(QueueLog, int): void
+        - checkAndSendQueueNotifications(Long): void
+        - sendThreeAwayNotification(QueueLog, int): void
+    }
+    
+    class NotificationService {
+        - sendGrid: SendGrid
+        - senderEmail: String
+        __
+        + sendAppointmentConfirmationEmail(NotificationRequest): void
+        + sendThreePatientsAwayEmail(NotificationRequest): void
+        + sendYourTurnEmail(NotificationRequest): void
+        - buildAppointmentConfirmationHtml(NotificationRequest): String
+        - buildThreePatientsAwayHtml(NotificationRequest): String
+        - buildYourTurnHtml(NotificationRequest): String
+        - sendEmail(String, String, String, String): void
+    }
+    
+    class PatientService {
+        - patientRepository: PatientRepository
+        - userRepository: UserRepository
+        __
+        + getAllPatients(): List<Patient>
+        + getPatientById(Long): Optional<Patient>
+        + getPatientByEmail(String): Optional<Patient>
+        + createPatient(Patient): Patient
+        + updatePatient(Long, Patient): Optional<Patient>
+        + deletePatient(Long): boolean
+        + patientExistsByEmail(String): boolean
+        + patientExistsByIc(String): boolean
+    }
+    
+    class StaffService {
+        - staffRepository: StaffRepository
+        - userRepository: UserRepository
+        - clinicRepository: ClinicRepository
+        __
+        + getAllStaff(): List<Staff>
+        + getStaffById(Long): Optional<Staff>
+        + getStaffByEmail(String): Optional<Staff>
+        + createStaff(Staff): Staff
+        + updateStaff(Long, Staff): Optional<Staff>
+        + deleteStaff(Long): boolean
+        + staffExistsByEmail(String): boolean
+        + getStaffByClinicId(Long): List<Staff>
+    }
+    
+    class UserService {
+        - userRepository: UserRepository
+        __
+        + getAllUsers(): List<User>
+        + getUserById(Long): Optional<User>
+        + getUserByEmail(String): Optional<User>
+        + getUserByAuthUuid(UUID): Optional<User>
+        + createUser(User): User
+        + updateUser(Long, User): Optional<User>
+        + deleteUser(Long): boolean
+        + userExistsByEmail(String): boolean
+        + userExistsByAuthUuid(UUID): boolean
+    }
+    
+    class ClinicService {
+        - clinicRepository: ClinicRepository
+        __
+        + getAllClinics(): List<Clinic>
+        + getClinicById(Long): Optional<Clinic>
+        + createClinic(Clinic): Clinic
+        + updateClinic(Long, Clinic): Optional<Clinic>
+        + deleteClinic(Long): boolean
+        + getClinicsByType(ClinicType): List<Clinic>
+        + getClinicsByRegion(String): List<Clinic>
+    }
+    
+    class DoctorService {
+        - doctorRepository: DoctorRepository
+        __
+        + getAllDoctors(): List<Doctor>
+        + getDoctorById(Long): Optional<Doctor>
+        + createDoctor(Doctor): Doctor
+        + updateDoctor(Long, Doctor): Optional<Doctor>
+        + deleteDoctor(Long): boolean
+        + getDoctorsByClinicId(Long): List<Doctor>
+    }
+}
+
+' ==================== REPOSITORY INTERFACES ====================
+
+package "Repository Layer" <<Rectangle>> {
+    
+    interface AppointmentRepository {
+        + findByPatientId(Long): List<Appointment>
+        + findByClinicId(Long): List<Appointment>
+        + findByDoctorId(Long): List<Appointment>
+        + findByApptStatus(String): List<Appointment>
+        + findByPatientIdAndApptStatus(Long, String): List<Appointment>
+        + findByClinicIdAndApptStatus(Long, String): List<Appointment>
+        + findByDateTimeBetween(LocalDateTime, LocalDateTime): List<Appointment>
+        + findByPatientIdAndDateTimeBetween(Long, LocalDateTime, LocalDateTime): List<Appointment>
+        + findByClinicIdAndDateTimeBetween(Long, LocalDateTime, LocalDateTime): List<Appointment>
+        + existsByClinicIdAndDoctorIdAndDateTime(Long, Long, LocalDateTime): boolean
+        + existsByPatientIdAndDateTime(Long, LocalDateTime): boolean
+        + existsByClinicIdAndDateTime(Long, LocalDateTime): boolean
+        + countByClinicIdAndDoctorIdAndDateTime(Long, Long, LocalDateTime): long
+    }
+    
+    interface QueueRepository {
+        + findByClinicIdAndStatusOrderByPriorityDescCreatedAtAsc(Long, String): List<QueueLog>
+        + findByClinicIdAndStatus(Long, String): List<QueueLog>
+        + findByAppointmentIdAndStatus(Long, String): Optional<QueueLog>
+        + findByAppointmentId(Long): List<QueueLog>
+        + existsByAppointmentIdAndStatus(Long, String): boolean
+        + countByClinicIdAndStatus(Long, String): long
+        + findCurrentlyServing(Long): Optional<QueueLog>
+    }
+    
+    interface PatientRepository {
+        + findByEmail(String): Optional<Patient>
+        + existsByEmail(String): boolean
+        + existsByPatientIc(String): boolean
+    }
+    
+    interface StaffRepository {
+        + findByEmail(String): Optional<Staff>
+        + existsByEmail(String): boolean
+        + findByClinic_Id(Long): List<Staff>
+    }
+    
+    interface UserRepository {
+        + findByEmail(String): Optional<User>
+        + findByAuthUuid(UUID): Optional<User>
+        + existsByEmail(String): boolean
+        + existsByAuthUuid(UUID): boolean
+    }
+    
+    interface ClinicRepository {
+        + findByClinicType(ClinicType): List<Clinic>
+        + findByRegion(String): List<Clinic>
+    }
+    
+    interface DoctorRepository {
+        + findByAssignedClinic(Long): List<Doctor>
+    }
+}
+
+' ==================== CONTROLLER CLASSES ====================
+
+package "Controller Layer" <<Rectangle>> {
+    
+    class AppointmentController {
+        - appointmentService: AppointmentService
+        __
+        + getAllAppointments(): ResponseEntity<List<Appointment>>
+        + getAppointmentById(Long): ResponseEntity<Appointment>
+        + createAppointment(Appointment): ResponseEntity<Appointment>
+        + updateAppointment(Long, AppointmentUpdateDTO): ResponseEntity<Appointment>
+        + deleteAppointment(Long): ResponseEntity<Void>
+        + getAppointmentsByPatientId(Long): ResponseEntity<List<Appointment>>
+        + getAppointmentsByClinicId(Long): ResponseEntity<List<Appointment>>
+        + getAppointmentsByDoctorId(Long): ResponseEntity<List<Appointment>>
+        + updateAppointmentStatus(Long, Map<String, String>): ResponseEntity<Appointment>
+        + healthCheck(): ResponseEntity<String>
+    }
+    
+    class QueueController {
+        - queueService: QueueService
+        __
+        + checkIn(Long, Integer): ResponseEntity<QueueEntryDTO>
+        + getClinicQueue(Long): ResponseEntity<List<QueueEntryDTO>>
+        + getQueuePosition(Long): ResponseEntity<QueuePositionDTO>
+        + updateQueueStatus(Long, QueueStatusUpdateDTO): ResponseEntity<QueueLog>
+        + requeueMissedPatient(Long, RequeueRequestDTO): ResponseEntity<QueueLog>
+        + callNextQueueNumber(Long): ResponseEntity<QueueLog>
+        + callByAppointmentId(Long): ResponseEntity<QueueLog>
+        + getMissedQueueEntries(Long): ResponseEntity<List<QueueEntryDTO>>
+        + streamQueuePosition(Long): SseEmitter
+    }
+    
+    class AdminController {
+        - patientService: PatientService
+        - staffService: StaffService
+        __
+        + getAllPatients(): ResponseEntity<List<Patient>>
+        + getPatientById(Long): ResponseEntity<Patient>
+        + getPatientByEmail(String): ResponseEntity<Patient>
+        + createPatient(CreatePatientRequestDTO): ResponseEntity<Patient>
+        + updatePatient(Long, Patient): ResponseEntity<Patient>
+        + deletePatient(Long): ResponseEntity<Void>
+        + getAllStaff(): ResponseEntity<List<Staff>>
+        + getStaffById(Long): ResponseEntity<Staff>
+        + getStaffByEmail(String): ResponseEntity<Staff>
+        + createStaff(CreateStaffRequestDTO): ResponseEntity<Staff>
+        + updateStaff(Long, UpdateStaffRequestDTO): ResponseEntity<Staff>
+        + deleteStaff(Long): ResponseEntity<Void>
+    }
+    
+    class UserController {
+        - userService: UserService
+        __
+        + getAllUsers(): ResponseEntity<List<User>>
+        + getUserById(Long): ResponseEntity<User>
+        + getUserByEmail(String): ResponseEntity<User>
+        + getUserByAuthUuid(String): ResponseEntity<User>
+        + createUser(User): ResponseEntity<User>
+        + updateUser(Long, User): ResponseEntity<User>
+        + deleteUser(Long): ResponseEntity<Void>
+    }
+    
+    class ClinicController {
+        - clinicService: ClinicService
+        __
+        + getAllClinics(): ResponseEntity<List<Clinic>>
+        + getClinicById(Long): ResponseEntity<Clinic>
+        + createClinic(Clinic): ResponseEntity<Clinic>
+        + updateClinic(Long, Clinic): ResponseEntity<Clinic>
+        + deleteClinic(Long): ResponseEntity<Void>
+        + getClinicsByType(String): ResponseEntity<List<Clinic>>
+        + getClinicsByRegion(String): ResponseEntity<List<Clinic>>
+    }
+    
+    class DoctorController {
+        - doctorService: DoctorService
+        __
+        + getAllDoctors(): ResponseEntity<List<Doctor>>
+        + getDoctorById(Long): ResponseEntity<Doctor>
+        + createDoctor(Doctor): ResponseEntity<Doctor>
+        + updateDoctor(Long, Doctor): ResponseEntity<Doctor>
+        + deleteDoctor(Long): ResponseEntity<Void>
+        + getDoctorsByClinicId(Long): ResponseEntity<List<Doctor>>
+    }
+    
+    class NotificationController {
+        - notificationService: NotificationService
+        __
+        + sendAppointmentConfirmation(NotificationRequest): ResponseEntity<String>
+        + sendThreePatientsAway(NotificationRequest): ResponseEntity<String>
+        + sendYourTurn(NotificationRequest): ResponseEntity<String>
+    }
+}
+
+' ==================== RELATIONSHIPS ====================
+
+' Inheritance
+User <|-- Patient
+User <|-- Staff
+
+' Associations between Entities
+Staff "1" --> "1" Clinic : assigned to
+Appointment "1" --> "1" AppointmentStatus : has
+Clinic "1" --> "1" ClinicType : has type
+
+' Service Dependencies
+AppointmentService --> AppointmentRepository : uses
+AppointmentService --> NotificationService : uses
+AppointmentService --> PatientRepository : uses
+AppointmentService --> ClinicRepository : uses
+AppointmentService --> DoctorRepository : uses
+
+QueueService --> QueueRepository : uses
+QueueService --> AppointmentRepository : uses
+QueueService --> NotificationService : uses
+QueueService --> PatientRepository : uses
+QueueService --> ClinicRepository : uses
+QueueService --> DoctorRepository : uses
+
+NotificationService ..> Appointment : sends emails for
+NotificationService ..> Patient : notifies
+
+PatientService --> PatientRepository : uses
+PatientService --> UserRepository : uses
+
+StaffService --> StaffRepository : uses
+StaffService --> UserRepository : uses
+StaffService --> ClinicRepository : uses
+
+UserService --> UserRepository : uses
+
+ClinicService --> ClinicRepository : uses
+
+DoctorService --> DoctorRepository : uses
+
+' Controller Dependencies
+AppointmentController --> AppointmentService : uses
+QueueController --> QueueService : uses
+AdminController --> PatientService : uses
+AdminController --> StaffService : uses
+UserController --> UserService : uses
+ClinicController --> ClinicService : uses
+DoctorController --> DoctorService : uses
+NotificationController --> NotificationService : uses
+
+' Repository extends JpaRepository
+AppointmentRepository --|> JpaRepository
+QueueRepository --|> JpaRepository
+PatientRepository --|> JpaRepository
+StaffRepository --|> JpaRepository
+UserRepository --|> JpaRepository
+ClinicRepository --|> JpaRepository
+DoctorRepository --|> JpaRepository
+
+interface JpaRepository {
+    + findAll(): List<T>
+    + findById(ID): Optional<T>
+    + save(T): T
+    + deleteById(ID): void
+    + existsById(ID): boolean
+    + count(): long
+}
+
+' Notes
+note top of User
+  Base entity with JOINED inheritance strategy
+  Subclasses: Patient, Staff
+end note
+
+note top of QueueLog
+  Priority-based queue ordering:
+  - Emergency (3)
+  - Elderly (2)
+  - Normal (1)
+  
+  Status transitions:
+  - IN_QUEUE → CALLED/MISSED
+  - CALLED → DONE/MISSED
+  - MISSED → IN_QUEUE (requeue)
+end note
+
+note top of AppointmentService
+  Key Business Logic:
+  - Double-booking prevention (max 3 per slot)
+  - Appointment confirmation emails
+  - Status management
+end note
+
+note top of QueueService
+  Key Business Logic:
+  - Queue position calculation
+  - Priority-based sorting
+  - Automatic notifications (3 away, your turn)
+  - SSE real-time updates
+end note
+
+@enduml

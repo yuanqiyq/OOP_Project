@@ -1,0 +1,129 @@
+@startuml SSE_Sequence_Diagram
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+
+title Server-Sent Events (SSE) - Real-Time Queue Updates (Simplified)
+
+actor "Patient\nBrowser" as Patient
+participant "EventSource\n(Frontend)" as EventSource
+participant "QueueController" as Controller
+participant "QueueSseService" as SseService
+participant "QueueService" as QueueSvc
+participant "Event\nPublisher" as EventPub
+database "Database" as DB
+
+== 1. Patient Connects to SSE Stream ==
+
+Patient -> EventSource: Open connection\nfor appointment #123
+EventSource -> Controller: GET /queue/position/123/stream
+Controller -> SseService: createConnection(123)
+activate SseService
+
+SseService -> SseService: Create SseEmitter\n(infinite timeout)
+note right: Store in ConcurrentHashMap
+
+SseService -> QueueSvc: getQueuePosition(123)
+activate QueueSvc
+QueueSvc -> DB: Query current position
+DB --> QueueSvc: Position = 5
+QueueSvc --> SseService: {position: 5, wait: 40 min}
+deactivate QueueSvc
+
+SseService --> EventSource: SSE Event: "queue-update"\n{"position": 5}
+deactivate SseService
+EventSource --> Patient: Display "Position 5"
+
+note over Patient, DB
+  **Connection Established** - Server can now push updates anytime
+end note
+
+== 2. Queue Changes (Someone Checks In) ==
+
+Patient -> Controller: POST /queue/check-in\n(different patient)
+Controller -> QueueSvc: checkInPatient(999)
+activate QueueSvc
+
+QueueSvc -> DB: INSERT new patient
+QueueSvc -> EventPub: publishEvent(QueueChangedEvent)
+note right: Trigger for SSE updates
+
+deactivate QueueSvc
+
+EventPub -> SseService: @EventListener\nhandleQueueChanged()
+activate SseService
+
+SseService -> QueueSvc: getClinicQueue(clinicId)
+activate QueueSvc
+QueueSvc -> DB: Get all IN_QUEUE patients
+DB --> QueueSvc: List of patients
+deactivate QueueSvc
+
+loop For each connected patient
+    SseService -> QueueSvc: getQueuePosition(123)
+    activate QueueSvc
+    QueueSvc -> DB: Calculate new position
+    DB --> QueueSvc: Position = 6 (moved down)
+    deactivate QueueSvc
+    
+    SseService --> EventSource: SSE Event: "queue-update"\n{"position": 6}
+    EventSource --> Patient: Update to "Position 6"
+    note right: Real-time update!
+end
+
+deactivate SseService
+
+== 3. Staff Calls Patient's Turn ==
+
+actor Staff
+Staff -> Controller: POST /queue/clinic/1/call-next
+Controller -> QueueSvc: callNextQueueNumber()
+activate QueueSvc
+
+QueueSvc -> DB: UPDATE status = 'CALLED'\nfor patient #123
+QueueSvc -> EventPub: publishEvent(QueueChangedEvent)
+
+deactivate QueueSvc
+
+EventPub -> SseService: @EventListener\nhandleQueueChanged()
+activate SseService
+
+SseService -> QueueSvc: getQueuePosition(123)
+activate QueueSvc
+QueueSvc -> DB: Query status
+DB --> QueueSvc: Status = 'CALLED', position = 0
+deactivate QueueSvc
+
+SseService --> EventSource: SSE Event: "queue-update"\n{"position": 0, "status": "CALLED",\n"message": "Your turn!"}
+EventSource --> Patient: Show alert\n"🔔 IT'S YOUR TURN!"
+
+deactivate SseService
+
+== 4. Connection Cleanup ==
+
+alt Appointment Completed
+    Staff -> Controller: POST /queue/appointment/123/done
+    Controller -> QueueSvc: markAppointmentDone(123)
+    QueueSvc -> DB: UPDATE status = 'DONE'
+    QueueSvc -> EventPub: publishEvent()
+    EventPub -> SseService: handleQueueChanged()
+    SseService -> SseService: remove(123)\nemitter.complete()
+    SseService --> EventSource: Connection closed
+    
+else Patient Closes Browser
+    Patient -> EventSource: Close tab
+    EventSource -> SseService: onCompletion()
+    SseService -> SseService: remove(123)
+    note right: Auto cleanup
+end
+
+note over Patient, DB
+  **Key Points:**
+  • Event-driven: Updates triggered by queue changes
+  • One-to-many: One event updates all affected patients
+  • No polling: Server pushes updates instantly
+  • Auto-reconnect: Browser handles connection drops
+  • Thread-safe: ConcurrentHashMap for connections
+end note
+
+@enduml
