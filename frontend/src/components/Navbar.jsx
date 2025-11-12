@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
+import logo from '../assets/logo.svg'
 import './Navbar.css'
 
 export default function Navbar({ currentPage = 'dashboard' }) {
@@ -108,8 +109,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
     <nav className="navbar">
       <div className="navbar-container">
         <div className="navbar-brand">
-          <div className="brand-icon">🏥</div>
-          <span className="brand-text">MediQ</span>
+          <img src={logo} alt="MediQ Logo" className="brand-icon" />
         </div>
         
         <div className="navbar-menu">
