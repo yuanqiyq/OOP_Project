@@ -17,7 +17,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://backend/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -28,6 +28,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: clinic-frontend
+    environment:
+      # Supabase configuration
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://ohhoxkloouxkkcuisjrc.supabase.co}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      VITE_SUPABASE_SERVICE_ROLE_KEY: ${VITE_SUPABASE_SERVICE_ROLE_KEY}
     ports:
       - "80:80"
     depends_on:
