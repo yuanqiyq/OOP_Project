@@ -109,8 +109,11 @@ export default function AdminView() {
     password: '',
     fname: '',
     lname: '',
-    clinicId: 969,
+    clinicId: null,
   })
+  const [staffClinicSearch, setStaffClinicSearch] = useState('')
+  const [showStaffClinicSuggestions, setShowStaffClinicSuggestions] = useState(false)
+  const [staffClinicSearchFocused, setStaffClinicSearchFocused] = useState(false)
 
   const [adminFormData, setAdminFormData] = useState({
     email: '',
@@ -143,6 +146,43 @@ export default function AdminView() {
   useEffect(() => {
     fetchAllData()
   }, [])
+
+  // Sync clinic search input with selected clinic (only when clinicId changes externally)
+  useEffect(() => {
+    if (clinics.length > 0) {
+      if (staffFormData.clinicId) {
+        const selectedClinic = clinics.find(c => c.id === staffFormData.clinicId)
+        if (selectedClinic) {
+          const expectedValue = `${selectedClinic.name} (ID: ${selectedClinic.id})`
+          // Only update if the current value doesn't match the expected format
+          // This prevents overriding user input while they're typing
+          const currentMatchesExpected = staffClinicSearch === expectedValue
+          if (!currentMatchesExpected && !showStaffClinicSuggestions) {
+            // Only sync if suggestions are not showing (user is not actively searching)
+            setStaffClinicSearch(expectedValue)
+          }
+        }
+      } else if (!showStaffClinicSuggestions && staffClinicSearch) {
+        // Clear search field when clinicId is null and user is not actively searching
+        setStaffClinicSearch('')
+      }
+    }
+  }, [staffFormData.clinicId])
+
+  // Filter clinics based on search
+  const filteredStaffClinics = clinics.filter(clinic => {
+    const searchLower = staffClinicSearch.toLowerCase()
+    const clinicName = clinic.name.toLowerCase()
+    const clinicId = clinic.id.toString()
+    return clinicName.includes(searchLower) || clinicId.includes(searchLower)
+  })
+
+  const handleStaffClinicSelect = (clinic) => {
+    setStaffFormData({ ...staffFormData, clinicId: clinic.id })
+    setStaffClinicSearch(`${clinic.name} (ID: ${clinic.id})`)
+    setShowStaffClinicSuggestions(false)
+    setStaffClinicSearchFocused(false)
+  }
 
   useEffect(() => {
     if (appointments.length > 0 || users.length > 0) {
@@ -341,6 +381,11 @@ export default function AdminView() {
     setLoading(true)
 
     try {
+      // Validate clinic selection
+      const selectedClinic = clinics.find(c => c.id === staffFormData.clinicId)
+      if (!selectedClinic) {
+        throw new Error('Please select a valid clinic')
+      }
       // Get current session to restore it after creating the new user
       const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
       
@@ -389,7 +434,8 @@ export default function AdminView() {
         type: 'success'
       })
       
-      setStaffFormData({ email: '', password: '', fname: '', lname: '', clinicId: 969 })
+      setStaffFormData({ email: '', password: '', fname: '', lname: '', clinicId: null })
+      setStaffClinicSearch('')
       setShowCreateStaff(false)
       await fetchUsers()
       await fetchStaff()
@@ -1847,21 +1893,67 @@ export default function AdminView() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="staff-clinicId">Clinic</label>
-                      <select
-                        id="staff-clinicId"
-                        value={staffFormData.clinicId}
-                        onChange={(e) =>
-                          setStaffFormData({ ...staffFormData, clinicId: Number(e.target.value) })
-                        }
-                        required
-                        disabled={loading}
-                      >
-                        {clinics.map(clinic => (
-                          <option key={clinic.id} value={clinic.id}>
-                            {clinic.name} (ID: {clinic.id})
-                          </option>
-                        ))}
-                      </select>
+                      <div className="clinic-autocomplete-wrapper">
+                        <input
+                          id="staff-clinicId"
+                          type="text"
+                          className="clinic-search-input"
+                          value={staffClinicSearch}
+                          onChange={(e) => {
+                            setStaffClinicSearch(e.target.value)
+                            setShowStaffClinicSuggestions(true)
+                          }}
+                          onFocus={() => {
+                            setShowStaffClinicSuggestions(true)
+                            setStaffClinicSearchFocused(true)
+                          }}
+                          onBlur={() => {
+                            // Delay hiding suggestions to allow click events
+                            setTimeout(() => {
+                              setShowStaffClinicSuggestions(false)
+                              setStaffClinicSearchFocused(false)
+                            }, 200)
+                          }}
+                          placeholder="Search clinics..."
+                          required
+                          disabled={loading}
+                          autoComplete="off"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && filteredStaffClinics.length > 0) {
+                              e.preventDefault()
+                              handleStaffClinicSelect(filteredStaffClinics[0])
+                            } else if (e.key === 'Escape') {
+                              setShowStaffClinicSuggestions(false)
+                              setStaffClinicSearchFocused(false)
+                            }
+                          }}
+                        />
+                        {showStaffClinicSuggestions && staffClinicSearchFocused && filteredStaffClinics.length > 0 && (
+                          <div className="clinic-suggestions-dropdown">
+                            {filteredStaffClinics.slice(0, 10).map(clinic => (
+                              <div
+                                key={clinic.id}
+                                className="clinic-suggestion-item"
+                                onClick={() => handleStaffClinicSelect(clinic)}
+                                onMouseDown={(e) => e.preventDefault()}
+                              >
+                                <span className="clinic-suggestion-name">{clinic.name}</span>
+                                <span className="clinic-suggestion-id">ID: {clinic.id}</span>
+                              </div>
+                            ))}
+                            {filteredStaffClinics.length > 10 && (
+                              <div className="clinic-suggestion-more">
+                                +{filteredStaffClinics.length - 10} more results
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {showStaffClinicSuggestions && staffClinicSearchFocused && filteredStaffClinics.length === 0 && staffClinicSearch && (
+                          <div className="clinic-suggestions-dropdown">
+                            <div className="clinic-suggestion-no-results">No clinics found</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <button type="submit" className="btn btn-primary" disabled={loading}>
                       {loading ? 'Creating...' : 'Create Staff Account'}
