@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import logo from '../assets/logo.svg'
 import './AuthPage.css'
 
 export default function AuthPage() {
@@ -61,14 +62,12 @@ export default function AuthPage() {
   return (
     <div className="auth-container">
       <div className="auth-card">
+        <div className="auth-logo-container">
+          <img src={logo} alt="MediQ Logo" className="auth-logo" />
+        </div>
         <h1 className="auth-title">
           {isLogin ? 'Sign In' : 'Patient Sign Up'}
         </h1>
-        <p className="auth-subtitle">
-          {isLogin
-            ? 'Welcome back! Please sign in to continue.'
-            : 'Create a patient account to access the appointment queue system.'}
-        </p>
 
         {error && <div className="auth-error">{error}</div>}
 
