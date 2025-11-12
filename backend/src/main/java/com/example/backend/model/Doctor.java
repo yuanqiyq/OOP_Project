@@ -38,7 +38,7 @@ public class Doctor {
     @Column(name = "lname", nullable = false)
     private String lname;
 
-    @Column(name = "assigned_clinic", nullable = false)
+    @Column(name = "assigned_clinic")
     private Long assignedClinic;
 
     @Column(name = "shift_days", columnDefinition = "jsonb")

@@ -84,10 +84,24 @@ public class DoctorService {
                     if (updatedDoctor.getLname() != null) {
                         existingDoctor.setLname(updatedDoctor.getLname());
                     }
-                    if (updatedDoctor.getAssignedClinic() != null) {
+                    // Handle assignedClinic - allow null to unassign doctor
+                    // Always update if provided (even if null) - we detect unassignment by checking
+                    // if the request has assignedClinic field (we'll always update it)
+                    // For simplicity, we'll update assignedClinic whenever the request contains it
+                    // Since we can't distinguish "not provided" from "null", we assume null means unassign
+                    // when the request body explicitly contains assignedClinic: null
+                    boolean isUnassigning = updatedDoctor.getAssignedClinic() == null && existingDoctor.getAssignedClinic() != null;
+                    boolean isAssigning = updatedDoctor.getAssignedClinic() != null;
+                    
+                    if (isAssigning || isUnassigning) {
                         existingDoctor.setAssignedClinic(updatedDoctor.getAssignedClinic());
+                        // If unassigning, also clear shift days
+                        if (isUnassigning) {
+                            existingDoctor.setShiftDays(null);
+                        }
                     }
-                    if (updatedDoctor.getShiftDays() != null) {
+                    // Update shift days if provided and not unassigning
+                    if (updatedDoctor.getShiftDays() != null && !isUnassigning) {
                         existingDoctor.setShiftDays(updatedDoctor.getShiftDays());
                     }
 

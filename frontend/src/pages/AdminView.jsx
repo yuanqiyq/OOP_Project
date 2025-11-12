@@ -31,6 +31,18 @@ export default function AdminView() {
   const [clinicDoctors, setClinicDoctors] = useState([])
   const [allDoctors, setAllDoctors] = useState([])
   const [newDoctorForm, setNewDoctorForm] = useState({ fname: '', lname: '', assignedClinic: null })
+  const [expandedClinics, setExpandedClinics] = useState(new Set())
+  const [clinicDoctorsMap, setClinicDoctorsMap] = useState({})
+  const [editingOperatingHours, setEditingOperatingHours] = useState(null)
+  const [operatingHoursForm, setOperatingHoursForm] = useState({})
+  const [editingClinicDoctors, setEditingClinicDoctors] = useState(null)
+  const [editingDoctorInClinic, setEditingDoctorInClinic] = useState(null)
+  const [editingDoctorShifts, setEditingDoctorShifts] = useState([])
+  const [assigningDoctor, setAssigningDoctor] = useState(null)
+  const [assigningDoctorShifts, setAssigningDoctorShifts] = useState([])
+  const [showUnassignConfirm, setShowUnassignConfirm] = useState(false)
+  const [doctorToUnassign, setDoctorToUnassign] = useState(null)
+  const [clinicToUnassignFrom, setClinicToUnassignFrom] = useState(null)
   // Doctor management state for doctors view
   const [showAddDoctorModal, setShowAddDoctorModal] = useState(false)
   const [showEditDoctorModal, setShowEditDoctorModal] = useState(false)
@@ -40,6 +52,8 @@ export default function AdminView() {
   const [selectedClinicFilter, setSelectedClinicFilter] = useState(null)
   const [clinicFilterSearch, setClinicFilterSearch] = useState('')
   const [showClinicFilterDropdown, setShowClinicFilterDropdown] = useState(false)
+  const [doctorNameSearch, setDoctorNameSearch] = useState('')
+  const [showDoctorSearchDropdown, setShowDoctorSearchDropdown] = useState(false)
   const [doctorPage, setDoctorPage] = useState(1)
   const [doctorsPerPage] = useState(20)
   const [stats, setStats] = useState({
@@ -486,6 +500,260 @@ export default function AdminView() {
     }
   }
 
+  const toggleClinicExpansion = async (clinicId) => {
+    const newExpanded = new Set(expandedClinics)
+    if (newExpanded.has(clinicId)) {
+      newExpanded.delete(clinicId)
+    } else {
+      newExpanded.add(clinicId)
+      // Fetch doctors for this clinic if not already loaded
+      if (!clinicDoctorsMap[clinicId]) {
+        try {
+          const doctors = await doctorAPI.getByClinic(clinicId)
+          setClinicDoctorsMap(prev => ({ ...prev, [clinicId]: doctors || [] }))
+        } catch (err) {
+          console.error('Failed to load doctors for clinic', err)
+          setClinicDoctorsMap(prev => ({ ...prev, [clinicId]: [] }))
+        }
+      }
+    }
+    setExpandedClinics(newExpanded)
+  }
+
+  const formatOperatingHours = (clinic) => {
+    if (!clinic) return null
+
+    const formatTime = (timeStr) => {
+      if (!timeStr) return null
+      const time = timeStr.split(':')
+      if (time.length < 2) return null
+      const hours = parseInt(time[0], 10)
+      const minutes = time[1] || '00'
+      if (isNaN(hours)) return null
+      const period = hours >= 12 ? 'PM' : 'AM'
+      const displayHours = hours > 12 ? hours - 12 : hours === 0 ? 12 : hours
+      return `${displayHours}:${minutes} ${period}`
+    }
+
+    const hours = []
+
+    // Monday-Friday
+    if (clinic.monFriAmStart || clinic.monFriPmStart) {
+      const monFriHours = []
+      if (clinic.monFriAmStart && clinic.monFriAmEnd) {
+        monFriHours.push(`${formatTime(clinic.monFriAmStart)} - ${formatTime(clinic.monFriAmEnd)}`)
+      }
+      if (clinic.monFriPmStart && clinic.monFriPmEnd) {
+        monFriHours.push(`${formatTime(clinic.monFriPmStart)} - ${formatTime(clinic.monFriPmEnd)}`)
+      }
+      if (monFriHours.length > 0) {
+        hours.push({ day: 'Mon - Fri', times: monFriHours.join(', ') })
+      }
+    }
+
+    // Saturday
+    if (clinic.satAmStart && clinic.satAmEnd) {
+      hours.push({ day: 'Saturday', times: `${formatTime(clinic.satAmStart)} - ${formatTime(clinic.satAmEnd)}` })
+    }
+
+    // Sunday
+    if (clinic.sunAmStart && clinic.sunAmEnd) {
+      hours.push({ day: 'Sunday', times: `${formatTime(clinic.sunAmStart)} - ${formatTime(clinic.sunAmEnd)}` })
+    }
+
+    // Public Holiday
+    if (clinic.phAmStart && clinic.phAmEnd) {
+      hours.push({ day: 'Public Holiday', times: `${formatTime(clinic.phAmStart)} - ${formatTime(clinic.phAmEnd)}` })
+    }
+
+    return hours.length > 0 ? hours : null
+  }
+
+  const handleEditOperatingHours = (clinic) => {
+    setEditingOperatingHours(clinic.id)
+    // Convert time strings to HH:mm format for time inputs
+    const formatTimeForInput = (timeStr) => {
+      if (!timeStr) return ''
+      // If already in HH:mm format, return as is
+      if (typeof timeStr === 'string' && timeStr.length === 5 && timeStr.includes(':')) {
+        return timeStr.substring(0, 5) // Ensure it's exactly HH:mm
+      }
+      // If in HH:mm:ss format, extract HH:mm
+      if (typeof timeStr === 'string' && timeStr.includes(':')) {
+        const parts = timeStr.split(':')
+        return `${parts[0]}:${parts[1]}`
+      }
+      return ''
+    }
+    
+    setOperatingHoursForm({
+      monFriAmStart: formatTimeForInput(clinic.monFriAmStart),
+      monFriAmEnd: formatTimeForInput(clinic.monFriAmEnd),
+      monFriPmStart: formatTimeForInput(clinic.monFriPmStart),
+      monFriPmEnd: formatTimeForInput(clinic.monFriPmEnd),
+      satAmStart: formatTimeForInput(clinic.satAmStart),
+      satAmEnd: formatTimeForInput(clinic.satAmEnd),
+      sunAmStart: formatTimeForInput(clinic.sunAmStart),
+      sunAmEnd: formatTimeForInput(clinic.sunAmEnd),
+      phAmStart: formatTimeForInput(clinic.phAmStart),
+      phAmEnd: formatTimeForInput(clinic.phAmEnd),
+    })
+  }
+
+  const handleSaveOperatingHours = async (clinicId) => {
+    try {
+      setLoading(true)
+      // Convert time strings to proper format (HH:mm)
+      const updateData = {}
+      Object.keys(operatingHoursForm).forEach(key => {
+        if (operatingHoursForm[key]) {
+          // Ensure time is in HH:mm format
+          let time = operatingHoursForm[key]
+          if (time.length === 5 && time.includes(':')) {
+            updateData[key] = time
+          }
+        } else {
+          updateData[key] = null
+        }
+      })
+      
+      await clinicAPI.update(clinicId, updateData)
+      setToast({
+        message: 'Operating hours updated successfully',
+        type: 'success'
+      })
+      await fetchClinics()
+      setEditingOperatingHours(null)
+      setOperatingHoursForm({})
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to update operating hours',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUnassignDoctorFromClinic = async () => {
+    if (!doctorToUnassign || !clinicToUnassignFrom) return
+    
+    try {
+      setLoading(true)
+      await doctorAPI.update(doctorToUnassign.id, { assignedClinic: null })
+      setToast({
+        message: `Dr. ${doctorToUnassign.fname} ${doctorToUnassign.lname} unassigned successfully`,
+        type: 'success'
+      })
+      // Refresh clinic doctors
+      const doctors = await doctorAPI.getByClinic(clinicToUnassignFrom)
+      setClinicDoctorsMap(prev => ({ ...prev, [clinicToUnassignFrom]: doctors || [] }))
+      // Refresh main doctors list
+      await fetchDoctors()
+      // Reset any editing states
+      setEditingDoctorInClinic(null)
+      setEditingDoctorShifts([])
+      // Close confirmation modal
+      setShowUnassignConfirm(false)
+      setDoctorToUnassign(null)
+      setClinicToUnassignFrom(null)
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to unassign doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const openUnassignConfirm = (doctor, clinicId) => {
+    setDoctorToUnassign(doctor)
+    setClinicToUnassignFrom(clinicId)
+    setShowUnassignConfirm(true)
+  }
+
+  const handleEditDoctorShiftsInClinic = (doctor, clinicId) => {
+    const shiftDaysArray = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+    setEditingDoctorInClinic(doctor.id)
+    setEditingDoctorShifts([...shiftDaysArray])
+    setEditingClinicDoctors(clinicId)
+  }
+
+  const handleSaveDoctorShiftsInClinic = async (doctorId, clinicId) => {
+    try {
+      setLoading(true)
+      await doctorAPI.update(doctorId, {
+        shiftDays: editingDoctorShifts.length > 0 ? editingDoctorShifts.sort() : null
+      })
+      setToast({
+        message: 'Doctor shifts updated successfully',
+        type: 'success'
+      })
+      // Refresh clinic doctors
+      const doctors = await doctorAPI.getByClinic(clinicId)
+      setClinicDoctorsMap(prev => ({ ...prev, [clinicId]: doctors || [] }))
+      await fetchDoctors() // Also refresh main doctors list
+      setEditingDoctorInClinic(null)
+      setEditingDoctorShifts([])
+      setEditingClinicDoctors(null)
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to update doctor shifts',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAssignDoctorToClinic = async (doctorId, clinicId) => {
+    try {
+      setLoading(true)
+      await doctorAPI.update(doctorId, {
+        assignedClinic: clinicId,
+        shiftDays: assigningDoctorShifts.length > 0 ? assigningDoctorShifts.sort() : null
+      })
+      setToast({
+        message: 'Doctor assigned successfully',
+        type: 'success'
+      })
+      // Refresh clinic doctors
+      const doctors = await doctorAPI.getByClinic(clinicId)
+      setClinicDoctorsMap(prev => ({ ...prev, [clinicId]: doctors || [] }))
+      await fetchDoctors() // Also refresh main doctors list
+      setAssigningDoctor(null)
+      setAssigningDoctorShifts([])
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to assign doctor',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleDayForDoctorInClinic = (day, isAssigning = false) => {
+    if (isAssigning) {
+      setAssigningDoctorShifts(prev => {
+        if (prev.includes(day)) {
+          return prev.filter(d => d !== day)
+        } else {
+          return [...prev, day].sort()
+        }
+      })
+    } else {
+      setEditingDoctorShifts(prev => {
+        if (prev.includes(day)) {
+          return prev.filter(d => d !== day)
+        } else {
+          return [...prev, day].sort()
+        }
+      })
+    }
+  }
+
   const openDoctorModal = async (clinic) => {
     setSelectedClinicForDoctors(clinic)
     setShowDoctorModal(true)
@@ -747,17 +1015,19 @@ export default function AdminView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClinicFilter, location.pathname])
 
-  // Close clinic filter dropdown when clicking outside
+  // Close clinic filter and doctor search dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       const target = event.target
       const isInsideDropdown = target.closest('.searchable-dropdown') !== null || 
                                target.closest('.dropdown-menu') !== null ||
                                target.closest('.dropdown-item') !== null ||
-                               target.closest('.clear-filter-btn') !== null
+                               target.closest('.clear-filter-btn') !== null ||
+                               target.closest('.doctor-search-wrapper') !== null
       
       if (!isInsideDropdown) {
         setShowClinicFilterDropdown(false)
+        setShowDoctorSearchDropdown(false)
       }
     }
     
@@ -774,6 +1044,37 @@ export default function AdminView() {
     return clinics.filter(clinic =>
       clinic.name?.toLowerCase().includes(clinicFilterSearch.toLowerCase())
     )
+  }
+
+  // Filter doctors by name for search suggestions
+  const getFilteredDoctorsForSearch = () => {
+    if (!doctorNameSearch) return []
+    const searchLower = doctorNameSearch.toLowerCase()
+    return doctors.filter(doctor => {
+      const fullName = `Dr. ${doctor.fname} ${doctor.lname}`.toLowerCase()
+      const firstName = doctor.fname?.toLowerCase() || ''
+      const lastName = doctor.lname?.toLowerCase() || ''
+      return fullName.includes(searchLower) || 
+             firstName.includes(searchLower) || 
+             lastName.includes(searchLower)
+    }).slice(0, 10) // Limit to 10 suggestions
+  }
+
+  // Filter doctors based on name search
+  const getFilteredDoctors = () => {
+    let filtered = doctors
+    if (doctorNameSearch) {
+      const searchLower = doctorNameSearch.toLowerCase()
+      filtered = filtered.filter(doctor => {
+        const fullName = `Dr. ${doctor.fname} ${doctor.lname}`.toLowerCase()
+        const firstName = doctor.fname?.toLowerCase() || ''
+        const lastName = doctor.lname?.toLowerCase() || ''
+        return fullName.includes(searchLower) || 
+               firstName.includes(searchLower) || 
+               lastName.includes(searchLower)
+      })
+    }
+    return filtered
   }
 
   // Update clinic filter search when selected clinic changes
@@ -1514,9 +1815,6 @@ export default function AdminView() {
               <>
                 <div className="page-header">
                   <h1>Clinic Management</h1>
-                  <button onClick={fetchClinics} className="btn btn-secondary">
-                    Refresh
-                  </button>
                 </div>
 
                 <div className="section-card">
@@ -1531,7 +1829,7 @@ export default function AdminView() {
                           setClinicSearch(e.target.value)
                           setClinicPage(1) // Reset to first page on search
                         }}
-                        className="search-input"
+                        className="search-input clinic-search-input"
                       />
                       <select
                         value={clinicsPerPage}
@@ -1553,87 +1851,541 @@ export default function AdminView() {
                     <div className="loading">Loading...</div>
                   ) : (
                     <>
-                      <div className="clinics-table-container">
-                        <table className="users-table">
-                          <thead>
-                            <tr>
-                              <th>ID</th>
-                              <th>Name</th>
-                              <th>Address</th>
-                              <th>Region</th>
-                              <th>Area</th>
-                              <th>Appt Interval (min)</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {paginatedClinics.map((clinic) => (
-                          <tr key={clinic.id}>
-                            <td>{clinic.id}</td>
-                            <td>{clinic.name || 'N/A'}</td>
-                            <td>{clinic.address || 'N/A'}</td>
-                            <td>{clinic.region || 'N/A'}</td>
-                            <td>{clinic.area || 'N/A'}</td>
-                            <td>
-                              {editingClinicId === clinic.id ? (
-                                <div className="inline-edit">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={editingInterval}
-                                    onChange={(e) => setEditingInterval(e.target.value)}
-                                    className="inline-input"
-                                    placeholder={clinic.apptIntervalMin || '15'}
-                                  />
-                                  <button
-                                    onClick={() => handleUpdateClinicInterval(clinic.id)}
-                                    className="btn btn-success btn-sm"
-                                    disabled={loading}
-                                    title="Save"
-                                  >
-                                    ✓
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingClinicId(null)
-                                      setEditingInterval('')
-                                    }}
-                                    className="btn btn-secondary btn-sm"
-                                    disabled={loading}
-                                    title="Cancel"
-                                  >
-                                    ✕
-                                  </button>
+                      <div className="clinics-cards-container">
+                        {paginatedClinics.map((clinic) => {
+                          const isExpanded = expandedClinics.has(clinic.id)
+                          const clinicDoctorsList = clinicDoctorsMap[clinic.id] || []
+                          const operatingHours = formatOperatingHours(clinic)
+                          const isEditingHours = editingOperatingHours === clinic.id
+
+                          return (
+                            <div key={clinic.id} className={`clinic-card ${isExpanded ? 'expanded' : ''}`}>
+                              <div 
+                                className="clinic-card-header"
+                                onClick={() => toggleClinicExpansion(clinic.id)}
+                              >
+                                <div className="clinic-card-main-info">
+                                  <div className="clinic-card-id">#{clinic.id}</div>
+                                  <div className="clinic-card-name">{clinic.name || 'N/A'}</div>
+                                  <div className="clinic-card-location">
+                                    {clinic.address || 'N/A'} • {clinic.region || 'N/A'} • {clinic.area || 'N/A'}
+                                  </div>
                                 </div>
-                              ) : (
-                                <div className="inline-display">
-                                  <span>{clinic.apptIntervalMin || 15} min</span>
-                                  <button
-                                    onClick={() => {
-                                      setEditingClinicId(clinic.id)
-                                      setEditingInterval(clinic.apptIntervalMin?.toString() || '15')
-                                    }}
-                                    className="btn btn-secondary btn-sm"
-                                    title="Edit Interval"
-                                  >
-                                    ✏️
-                                  </button>
+                                <div className="clinic-card-expand-icon">
+                                  {isExpanded ? '▼' : '▶'}
+                                </div>
+                              </div>
+                              
+                              {isExpanded && (
+                                <div className="clinic-card-expanded-content">
+                                  {/* Doctors Section */}
+                                  <div className="clinic-detail-section">
+                                    <div className="clinic-detail-header">
+                                      <h3>Doctors ({clinicDoctorsList.length})</h3>
+                                      {editingClinicDoctors === clinic.id ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setEditingClinicDoctors(null)
+                                            setEditingDoctorInClinic(null)
+                                            setAssigningDoctor(null)
+                                            setEditingDoctorShifts([])
+                                            setAssigningDoctorShifts([])
+                                          }}
+                                          className="btn btn-secondary btn-sm"
+                                        >
+                                          ✕ Cancel
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setEditingClinicDoctors(clinic.id)
+                                            // Fetch unassigned doctors
+                                            fetchDoctors()
+                                          }}
+                                          className="btn btn-secondary btn-sm"
+                                        >
+                                          ✏️ Edit
+                                        </button>
+                                      )}
+                                    </div>
+                                    {editingClinicDoctors === clinic.id ? (
+                                      <div className="clinic-doctors-edit">
+                                        {/* Assigned Doctors */}
+                                        <div className="assigned-doctors-section">
+                                          <h4>Assigned Doctors</h4>
+                                          {clinicDoctorsList.length === 0 ? (
+                                            <p className="clinic-detail-empty">No doctors assigned</p>
+                                          ) : (
+                                            <div className="clinic-doctors-list">
+                                              {clinicDoctorsList.map((doctor) => {
+                                                const doctorShiftDays = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+                                                const isEditingShifts = editingDoctorInClinic === doctor.id
+                                                
+                                                return (
+                                                  <div key={doctor.id} className="clinic-doctor-item-edit">
+                                                    <div className="doctor-item-header">
+                                                      <span className="doctor-name">Dr. {doctor.fname} {doctor.lname}</span>
+                                                      {!isEditingShifts ? (
+                                                        <>
+                                                          {doctorShiftDays.length > 0 && (
+                                                            <div className="shift-days-display">
+                                                              {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                                                                <span
+                                                                  key={day}
+                                                                  className={`shift-day-badge ${doctorShiftDays.includes(day) ? 'active' : 'inactive'}`}
+                                                                  title={getDayFullName(day)}
+                                                                >
+                                                                  {getDayLabel(day)}
+                                                                </span>
+                                                              ))}
+                                                            </div>
+                                                          )}
+                                                          <div className="doctor-item-actions">
+                                                            <button
+                                                              onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleEditDoctorShiftsInClinic(doctor, clinic.id)
+                                                              }}
+                                                              className="btn btn-secondary btn-sm"
+                                                              disabled={loading}
+                                                            >
+                                                              Edit Shifts
+                                                            </button>
+                                                            <button
+                                                              onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                openUnassignConfirm(doctor, clinic.id)
+                                                              }}
+                                                              className="btn btn-danger btn-sm"
+                                                              disabled={loading}
+                                                            >
+                                                              Unassign
+                                                            </button>
+                                                          </div>
+                                                        </>
+                                                      ) : (
+                                                        <div className="doctor-shifts-edit-container">
+                                                          <div className="shift-days-selector">
+                                                            {[1, 2, 3, 4, 5, 6, 7].map(day => {
+                                                              const isSelected = editingDoctorShifts.includes(day)
+                                                              // Check if this day is already taken by another doctor in the same clinic
+                                                              const isFilled = clinicDoctorsList.some(d => {
+                                                                if (d.id === doctor.id) return false
+                                                                const dShiftDays = Array.isArray(d.shiftDays) ? d.shiftDays : (d.shiftDays ? [d.shiftDays] : [])
+                                                                return dShiftDays.includes(day)
+                                                              })
+                                                              return (
+                                                                <button
+                                                                  key={day}
+                                                                  type="button"
+                                                                  className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
+                                                                  onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    if (!isFilled) {
+                                                                      toggleDayForDoctorInClinic(day, false)
+                                                                    }
+                                                                  }}
+                                                                  disabled={isFilled}
+                                                                  title={isFilled ? `${getDayFullName(day)} is already assigned to another doctor` : getDayFullName(day)}
+                                                                >
+                                                                  <span className="day-label">{getDayLabel(day)}</span>
+                                                                  <span className="day-full">{getDayFullName(day)}</span>
+                                                                </button>
+                                                              )
+                                                            })}
+                                                          </div>
+                                                          <div className="doctor-shift-actions">
+                                                            <button
+                                                              onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                handleSaveDoctorShiftsInClinic(doctor.id, clinic.id)
+                                                              }}
+                                                              className="btn btn-success btn-sm"
+                                                              disabled={loading}
+                                                            >
+                                                              ✓ Save
+                                                            </button>
+                                                            <button
+                                                              onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setEditingDoctorInClinic(null)
+                                                                setEditingDoctorShifts([])
+                                                              }}
+                                                              className="btn btn-secondary btn-sm"
+                                                              disabled={loading}
+                                                            >
+                                                              ✕ Cancel
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Unassigned Doctors */}
+                                        <div className="unassigned-doctors-section">
+                                          <h4>Assign Doctor</h4>
+                                          {doctors.filter(d => !d.assignedClinic).length === 0 ? (
+                                            <p className="clinic-detail-empty">No unassigned doctors available</p>
+                                          ) : (
+                                            <div className="clinic-doctors-list">
+                                              {doctors
+                                                .filter(d => !d.assignedClinic)
+                                                .map((doctor) => {
+                                                  const isAssigning = assigningDoctor === doctor.id
+                                                  
+                                                  return (
+                                                    <div key={doctor.id} className="clinic-doctor-item-edit">
+                                                      <div className="doctor-item-header">
+                                                        <span className="doctor-name">Dr. {doctor.fname} {doctor.lname}</span>
+                                                        {!isAssigning ? (
+                                                          <button
+                                                            onClick={(e) => {
+                                                              e.stopPropagation()
+                                                              setAssigningDoctor(doctor.id)
+                                                              setAssigningDoctorShifts([])
+                                                            }}
+                                                            className="btn btn-success btn-sm"
+                                                            disabled={loading}
+                                                          >
+                                                            Assign
+                                                          </button>
+                                                        ) : (
+                                                          <div className="doctor-shifts-edit-container">
+                                                            <div className="shift-days-selector">
+                                                              {[1, 2, 3, 4, 5, 6, 7].map(day => {
+                                                                const isSelected = assigningDoctorShifts.includes(day)
+                                                                // Check if this day is already taken by another doctor in the same clinic
+                                                                const isFilled = clinicDoctorsList.some(d => {
+                                                                  const dShiftDays = Array.isArray(d.shiftDays) ? d.shiftDays : (d.shiftDays ? [d.shiftDays] : [])
+                                                                  return dShiftDays.includes(day)
+                                                                })
+                                                                return (
+                                                                  <button
+                                                                    key={day}
+                                                                    type="button"
+                                                                    className={`shift-day-button ${isSelected ? 'selected' : ''} ${isFilled ? 'filled' : ''}`}
+                                                                    onClick={(e) => {
+                                                                      e.stopPropagation()
+                                                                      if (!isFilled) {
+                                                                        toggleDayForDoctorInClinic(day, true)
+                                                                      }
+                                                                    }}
+                                                                    disabled={isFilled}
+                                                                    title={isFilled ? `${getDayFullName(day)} is already assigned to another doctor` : getDayFullName(day)}
+                                                                  >
+                                                                    <span className="day-label">{getDayLabel(day)}</span>
+                                                                    <span className="day-full">{getDayFullName(day)}</span>
+                                                                  </button>
+                                                                )
+                                                              })}
+                                                            </div>
+                                                            <div className="doctor-shift-actions">
+                                                              <button
+                                                                onClick={(e) => {
+                                                                  e.stopPropagation()
+                                                                  handleAssignDoctorToClinic(doctor.id, clinic.id)
+                                                                }}
+                                                                className="btn btn-success btn-sm"
+                                                                disabled={loading}
+                                                              >
+                                                                ✓ Assign
+                                                              </button>
+                                                              <button
+                                                                onClick={(e) => {
+                                                                  e.stopPropagation()
+                                                                  setAssigningDoctor(null)
+                                                                  setAssigningDoctorShifts([])
+                                                                }}
+                                                                className="btn btn-secondary btn-sm"
+                                                                disabled={loading}
+                                                              >
+                                                                ✕ Cancel
+                                                              </button>
+                                                            </div>
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  )
+                                                })}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <div className="clinic-doctors-edit-actions">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setEditingClinicDoctors(null)
+                                              setEditingDoctorInClinic(null)
+                                              setAssigningDoctor(null)
+                                              setEditingDoctorShifts([])
+                                              setAssigningDoctorShifts([])
+                                            }}
+                                            className="btn btn-secondary"
+                                          >
+                                            Done
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        {clinicDoctorsList.length === 0 ? (
+                                          <p className="clinic-detail-empty">No doctors assigned</p>
+                                        ) : (
+                                          <div className="clinic-doctors-list">
+                                            {clinicDoctorsList.map((doctor) => {
+                                              const doctorShiftDays = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+                                              return (
+                                                <div key={doctor.id} className="clinic-doctor-item">
+                                                  <span className="doctor-name">Dr. {doctor.fname} {doctor.lname}</span>
+                                                  {doctorShiftDays.length > 0 && (
+                                                    <div className="shift-days-display">
+                                                      {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                                                        <span
+                                                          key={day}
+                                                          className={`shift-day-badge ${doctorShiftDays.includes(day) ? 'active' : 'inactive'}`}
+                                                          title={getDayFullName(day)}
+                                                        >
+                                                          {getDayLabel(day)}
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Operating Hours Section */}
+                                  <div className="clinic-detail-section">
+                                    <div className="clinic-detail-header">
+                                      <h3>Operating Hours</h3>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleEditOperatingHours(clinic)
+                                        }}
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={isEditingHours}
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                    </div>
+                                    {isEditingHours ? (
+                                      <div className="operating-hours-edit-form">
+                                        <div className="hours-form-row">
+                                          <div className="hours-form-group">
+                                            <label>Mon-Fri AM Start</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.monFriAmStart || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, monFriAmStart: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                          <div className="hours-form-group">
+                                            <label>Mon-Fri AM End</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.monFriAmEnd || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, monFriAmEnd: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="hours-form-row">
+                                          <div className="hours-form-group">
+                                            <label>Mon-Fri PM Start</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.monFriPmStart || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, monFriPmStart: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                          <div className="hours-form-group">
+                                            <label>Mon-Fri PM End</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.monFriPmEnd || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, monFriPmEnd: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="hours-form-row">
+                                          <div className="hours-form-group">
+                                            <label>Saturday Start</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.satAmStart || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, satAmStart: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                          <div className="hours-form-group">
+                                            <label>Saturday End</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.satAmEnd || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, satAmEnd: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="hours-form-row">
+                                          <div className="hours-form-group">
+                                            <label>Sunday Start</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.sunAmStart || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, sunAmStart: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                          <div className="hours-form-group">
+                                            <label>Sunday End</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.sunAmEnd || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, sunAmEnd: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="hours-form-row">
+                                          <div className="hours-form-group">
+                                            <label>Public Holiday Start</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.phAmStart || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, phAmStart: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                          <div className="hours-form-group">
+                                            <label>Public Holiday End</label>
+                                            <input
+                                              type="time"
+                                              value={operatingHoursForm.phAmEnd || ''}
+                                              onChange={(e) => setOperatingHoursForm({ ...operatingHoursForm, phAmEnd: e.target.value })}
+                                              className="time-input"
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="hours-form-actions">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleSaveOperatingHours(clinic.id)
+                                            }}
+                                            className="btn btn-success btn-sm"
+                                            disabled={loading}
+                                          >
+                                            ✓ Save
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setEditingOperatingHours(null)
+                                              setOperatingHoursForm({})
+                                            }}
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={loading}
+                                          >
+                                            ✕ Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      operatingHours && operatingHours.length > 0 ? (
+                                        <div className="operating-hours-display">
+                                          {operatingHours.map((schedule, idx) => (
+                                            <div key={idx} className="hours-item">
+                                              <span className="hours-day">{schedule.day}:</span>
+                                              <span className="hours-time">{schedule.times}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="clinic-detail-empty">No operating hours set</p>
+                                      )
+                                    )}
+                                  </div>
+
+                                  {/* Appointment Interval Section */}
+                                  <div className="clinic-detail-section">
+                                    <div className="clinic-detail-header">
+                                      <h3>Appointment Interval</h3>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setEditingClinicId(clinic.id)
+                                          setEditingInterval(clinic.apptIntervalMin?.toString() || '15')
+                                        }}
+                                        className="btn btn-secondary btn-sm"
+                                        disabled={editingClinicId === clinic.id}
+                                      >
+                                        ✏️ Edit
+                                      </button>
+                                    </div>
+                                    {editingClinicId === clinic.id ? (
+                                      <div className="interval-edit-form">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={editingInterval}
+                                          onChange={(e) => setEditingInterval(e.target.value)}
+                                          className="interval-input"
+                                          placeholder={clinic.apptIntervalMin || '15'}
+                                        />
+                                        <span className="interval-unit">minutes</span>
+                                        <div className="interval-actions">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleUpdateClinicInterval(clinic.id)
+                                            }}
+                                            className="btn btn-success btn-sm"
+                                            disabled={loading}
+                                          >
+                                            ✓ Save
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              setEditingClinicId(null)
+                                              setEditingInterval('')
+                                            }}
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={loading}
+                                          >
+                                            ✕ Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="clinic-detail-value">{clinic.apptIntervalMin || 15} minutes</p>
+                                    )}
+                                  </div>
                                 </div>
                               )}
-                            </td>
-                            <td>
-                              <button
-                                onClick={() => openDoctorModal(clinic)}
-                                className="btn btn-primary btn-sm"
-                                title="Configure Doctors"
-                              >
-                                👨‍⚕️ Doctors
-                              </button>
-                            </td>
-                          </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </div>
+                          )
+                        })}
                       </div>
                       {totalPages > 1 && (
                         <div className="pagination-controls">
@@ -1665,17 +2417,81 @@ export default function AdminView() {
           })()}
 
           {currentView === 'doctors' && (() => {
+            // Filter doctors by name search
+            const filteredDoctors = getFilteredDoctors()
             // Calculate pagination
-            const totalPages = Math.ceil(doctors.length / doctorsPerPage)
+            const totalPages = Math.ceil(filteredDoctors.length / doctorsPerPage)
             const startIndex = (doctorPage - 1) * doctorsPerPage
             const endIndex = startIndex + doctorsPerPage
-            const paginatedDoctors = doctors.slice(startIndex, endIndex)
+            const paginatedDoctors = filteredDoctors.slice(startIndex, endIndex)
 
             return (
             <>
               <div className="page-header">
                 <h1>Doctors</h1>
                 <div className="header-controls">
+                  <div className="doctor-search-wrapper">
+                    <label htmlFor="doctor-name-search">Search by Name</label>
+                    <div className="searchable-dropdown">
+                      <input
+                        id="doctor-name-search"
+                        type="text"
+                        placeholder="Search doctors by name..."
+                        value={doctorNameSearch}
+                        onChange={(e) => {
+                          setDoctorNameSearch(e.target.value)
+                          setShowDoctorSearchDropdown(true)
+                          setDoctorPage(1)
+                        }}
+                        onFocus={() => setShowDoctorSearchDropdown(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="input-sm doctor-search-input"
+                      />
+                      {showDoctorSearchDropdown && doctorNameSearch && (
+                        <div className="dropdown-menu doctor-search-dropdown" onClick={(e) => e.stopPropagation()}>
+                          {getFilteredDoctorsForSearch().map((doctor) => (
+                            <div
+                              key={doctor.id}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDoctorNameSearch(`Dr. ${doctor.fname} ${doctor.lname}`)
+                                setShowDoctorSearchDropdown(false)
+                                setDoctorPage(1)
+                              }}
+                            >
+                              <span className="doctor-suggestion-name">Dr. {doctor.fname} {doctor.lname}</span>
+                              {doctor.assignedClinic && (
+                                <span className="doctor-suggestion-clinic">
+                                  {clinics.find(c => c.id === doctor.assignedClinic)?.name || `Clinic ${doctor.assignedClinic}`}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {getFilteredDoctorsForSearch().length === 0 && (
+                            <div className="dropdown-item" style={{ color: '#999', cursor: 'default' }}>
+                              No doctors found
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {doctorNameSearch && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDoctorNameSearch('')
+                            setShowDoctorSearchDropdown(false)
+                            setDoctorPage(1)
+                          }}
+                          type="button"
+                          aria-label="Clear doctor search"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <div className="clinic-filter-wrapper">
                     <label htmlFor="clinic-filter">Filter by Clinic</label>
                     <div className="searchable-dropdown">
@@ -1777,18 +2593,20 @@ export default function AdminView() {
                 <div className="section-header">
                   <h2>
                     {selectedClinicFilter 
-                      ? `Doctors at ${clinics.find(c => c.id === selectedClinicFilter)?.name || 'Selected Clinic'} (${doctors.length})`
-                      : `All Doctors (${doctors.length})`}
+                      ? `Doctors at ${clinics.find(c => c.id === selectedClinicFilter)?.name || 'Selected Clinic'}${doctorNameSearch ? ` - "${doctorNameSearch}"` : ''} (${filteredDoctors.length})`
+                      : `All Doctors${doctorNameSearch ? ` - "${doctorNameSearch}"` : ''} (${filteredDoctors.length})`}
                   </h2>
                 </div>
                 {loading ? (
                   <div className="loading">Loading...</div>
-                ) : doctors.length === 0 ? (
+                ) : filteredDoctors.length === 0 ? (
                   <div className="empty-state">
                     <p>
-                      {selectedClinicFilter 
-                        ? 'No doctors found for the selected clinic'
-                        : 'No doctors found'}
+                      {doctorNameSearch 
+                        ? `No doctors found matching "${doctorNameSearch}"`
+                        : selectedClinicFilter 
+                          ? 'No doctors found for the selected clinic'
+                          : 'No doctors found'}
                     </p>
                     <button onClick={() => {
                       setFilledDays(new Set())
@@ -1915,7 +2733,23 @@ export default function AdminView() {
                         <label>Clinic *</label>
                         <select
                           value={editingDoctor.assignedClinic || ''}
-                          onChange={(e) => setEditingDoctor({ ...editingDoctor, assignedClinic: e.target.value ? parseInt(e.target.value) : null })}
+                          onChange={(e) => {
+                            const newClinicId = e.target.value ? parseInt(e.target.value) : null
+                            setEditingDoctor({ ...editingDoctor, assignedClinic: newClinicId })
+                            // Recalculate filled days for the selected clinic
+                            if (newClinicId) {
+                              const filled = new Set()
+                              doctors.forEach(d => {
+                                if (d.shiftDays && d.id !== editingDoctor.id && d.assignedClinic === newClinicId) {
+                                  const days = Array.isArray(d.shiftDays) ? d.shiftDays : (d.shiftDays ? [d.shiftDays] : [])
+                                  days.forEach(day => filled.add(day))
+                                }
+                              })
+                              setFilledDays(filled)
+                            } else {
+                              setFilledDays(new Set())
+                            }
+                          }}
                           className="input-sm"
                         >
                           <option value="">Unassigned</option>
@@ -1924,6 +2758,41 @@ export default function AdminView() {
                           ))}
                         </select>
                       </div>
+                      {editingDoctor.assignedClinic && (
+                        <div className="form-group">
+                          <label>Unassign from Clinic</label>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to unassign this doctor from ${clinics.find(c => c.id === editingDoctor.assignedClinic)?.name || 'the clinic'}?`)) {
+                                try {
+                                  setLoading(true)
+                                  await doctorAPI.update(editingDoctor.id, { assignedClinic: null })
+                                  setToast({
+                                    message: 'Doctor unassigned successfully',
+                                    type: 'success'
+                                  })
+                                  setShowEditDoctorModal(false)
+                                  setEditingDoctor(null)
+                                  await fetchDoctorsForView()
+                                  await fetchDoctors()
+                                } catch (err) {
+                                  setToast({
+                                    message: err.message || 'Failed to unassign doctor',
+                                    type: 'error'
+                                  })
+                                } finally {
+                                  setLoading(false)
+                                }
+                              }
+                            }}
+                            className="btn btn-danger btn-sm"
+                            disabled={loading}
+                          >
+                            Unassign from Clinic
+                          </button>
+                        </div>
+                      )}
                       <div className="form-group">
                         <label>Shift Days</label>
                         <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors in the same clinic. Leave empty if no shifts assigned.</p>
@@ -2323,6 +3192,60 @@ export default function AdminView() {
                     {loading ? 'Creating...' : 'Create & Assign Doctor'}
                   </button>
                 </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unassign Confirmation Modal */}
+      {showUnassignConfirm && doctorToUnassign && (
+        <div className="modal-overlay" onClick={() => {
+          setShowUnassignConfirm(false)
+          setDoctorToUnassign(null)
+          setClinicToUnassignFrom(null)
+        }}>
+          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirm Unassign</h2>
+              <button
+                onClick={() => {
+                  setShowUnassignConfirm(false)
+                  setDoctorToUnassign(null)
+                  setClinicToUnassignFrom(null)
+                }}
+                className="modal-close"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="confirm-message">
+                Are you sure you want to unassign <strong>Dr. {doctorToUnassign.fname} {doctorToUnassign.lname}</strong> from this clinic?
+              </p>
+              <p className="confirm-warning">
+                This will remove the doctor from the clinic. You can reassign them later if needed.
+              </p>
+              <div className="modal-actions">
+                <button
+                  onClick={handleUnassignDoctorFromClinic}
+                  className="btn btn-danger"
+                  disabled={loading}
+                >
+                  {loading ? 'Unassigning...' : 'Unassign'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUnassignConfirm(false)
+                    setDoctorToUnassign(null)
+                    setClinicToUnassignFrom(null)
+                  }}
+                  className="btn btn-secondary"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
