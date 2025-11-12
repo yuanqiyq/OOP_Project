@@ -184,10 +184,6 @@ public class NotificationService {
                                         <td class="label">Date & Time:</td>
                                         <td>%s</td>
                                     </tr>
-                                    <tr>
-                                        <td class="label">Queue Number:</td>
-                                        <td><strong>%d</strong></td>
-                                    </tr>
                                 </table>
 
                                 <div class="alert">
@@ -210,7 +206,6 @@ public class NotificationService {
                 request.getAppointmentNumber(),
                 request.getDoctorName(),
                 request.getAppointmentDateTime(),
-                request.getQueueNumber(),
                 roomInfo);
     }
 
