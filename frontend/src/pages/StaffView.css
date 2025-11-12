@@ -68,7 +68,7 @@
 }
 
 .subtitle {
-  color: var(--teal-primary);
+  color: var(--teal-primary) !important;
   font-size: 1rem;
   font-weight: 600;
   margin-top: 0.5rem;

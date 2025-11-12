@@ -97,7 +97,7 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.95rem;
   font-weight: 500;
-  color: var(--teal-primary);
+  color: #2d2d2d;
   position: relative;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(78, 205, 196, 0.08);
@@ -131,7 +131,7 @@
 .navbar-menu-item.active {
   background: linear-gradient(135deg, rgba(78, 205, 196, 0.2) 0%, rgba(126, 227, 220, 0.15) 100%);
   border-color: rgba(78, 205, 196, 0.5);
-  color: var(--teal-dark);
+  color: #2d2d2d;
   font-weight: 600;
   box-shadow: 0 4px 16px rgba(78, 205, 196, 0.25),
               0 0 0 1px rgba(78, 205, 196, 0.2) inset;
@@ -216,7 +216,7 @@
 }
 
 .user-name {
-  color: var(--teal-primary);
+  color: #2d2d2d;
   font-weight: 600;
   font-size: 1.05rem;
   white-space: nowrap;
@@ -274,7 +274,7 @@
 }
 
 .dropdown-icon {
-  color: var(--teal-primary);
+  color: #2d2d2d;
   transition: transform 0.3s;
   flex-shrink: 0;
 }
@@ -330,7 +330,7 @@
 
 .dropdown-email {
   font-size: 0.9rem;
-  color: var(--teal-primary);
+  color: #2d2d2d;
   font-weight: 600;
   word-break: break-all;
 }
@@ -349,7 +349,7 @@
   width: 100%;
   border: none;
   background: transparent;
-  color: var(--teal-primary);
+  color: #2d2d2d;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
@@ -358,17 +358,17 @@
 }
 
 .dropdown-item svg {
-  color: var(--teal-primary);
+  color: #2d2d2d;
   flex-shrink: 0;
 }
 
 .dropdown-item:hover {
   background: var(--gradient-glow);
-  color: var(--teal-dark);
+  color: #000000;
 }
 
 .dropdown-item:hover svg {
-  color: var(--teal-dark);
+  color: #000000;
 }
 
 /* Logout button icon (for patient view) */
@@ -385,7 +385,7 @@
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  color: var(--teal-primary);
+  color: #2d2d2d;
   padding: 0;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(78, 205, 196, 0.08);
@@ -397,7 +397,7 @@
   transform: translateY(-2px) scale(1.05);
   box-shadow: 0 8px 24px rgba(78, 205, 196, 0.2),
               0 0 0 1px rgba(78, 205, 196, 0.1) inset;
-  color: var(--teal-dark);
+  color: #000000;
 }
 
 .logout-btn-icon svg {

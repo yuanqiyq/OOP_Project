@@ -9,7 +9,7 @@
 
 .patient-main {
   padding: 2rem;
-  padding-top: 8rem;
+  padding-top: 10rem;
   overflow-x: hidden;
   max-width: 1600px;
   margin: 0 auto;
@@ -123,16 +123,23 @@
 }
 
 .subtitle {
-  color: var(--teal-primary);
+  color: #ffffff !important;
   font-size: 1rem;
   font-weight: 600;
   margin-top: 0.5rem;
   padding: 0.5rem 1rem;
-  background: var(--gradient-glow);
+  background: rgba(78, 205, 196, 0.15);
   border-radius: 12px;
   display: inline-block;
-  border: 1px solid rgba(78, 205, 196, 0.2);
-  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.1);
+  border: 2px solid var(--teal-primary);
+  box-shadow: 0 0 20px rgba(78, 205, 196, 0.5),
+              0 0 40px rgba(78, 205, 196, 0.3),
+              0 4px 12px rgba(78, 205, 196, 0.2);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header .subtitle {
+  color: #ffffff !important;
 }
 
 .header-actions {
@@ -277,7 +284,7 @@
 }
 
 .queue-section-title {
-  color: var(--teal-dark);
+  color: var(--teal-primary);
   margin: 0 0 1.5rem 0;
   font-size: 1.5rem;
   font-weight: 600;
@@ -2179,24 +2186,37 @@ select.input-sm:focus {
 }
 
 .btn-close {
-  background: transparent;
-  border: none;
-  color: #666;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(78, 205, 196, 0.3);
+  color: #ffffff;
   font-size: 1.5rem;
+  font-weight: 600;
   cursor: pointer;
-  padding: 0.5rem;
-  transition: all 0.2s;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .btn-close:hover {
-  color: var(--teal-primary);
-  background: var(--gradient-glow);
+  color: #ffffff;
+  background: rgba(78, 205, 196, 0.3);
+  border-color: var(--teal-primary);
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.4),
+              0 0 20px rgba(78, 205, 196, 0.2);
 }
 
 @media (max-width: 768px) {
   .patient-main {
     padding: 1rem;
+    padding-top: 8rem;
   }
 
   .stats-grid {

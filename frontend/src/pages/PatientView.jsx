@@ -92,11 +92,6 @@ export default function PatientView() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   
-  // Location
-  const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState(null)
-  const [clinicCoordinates, setClinicCoordinates] = useState({})
-  
   // Patient profile data state
   const [patientData, setPatientData] = useState(null)
   const [patientFormData, setPatientFormData] = useState({
@@ -707,7 +702,6 @@ export default function PatientView() {
     if (currentView === 'appointments') {
       fetchClinics()
       fetchDoctors()
-      requestLocationPermission()
     } else if (currentView === 'medical-history') {
       fetchClinics()
       fetchDoctors()
@@ -723,7 +717,7 @@ export default function PatientView() {
       setCurrentPage(1) // Reset to first page when filters change
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterDoctor, filterClinic, filterRegion, filterSpecialty, filterDate, clinics, userLocation])
+  }, [filterDoctor, filterClinic, filterRegion, filterSpecialty, filterDate, clinics])
 
   // Update displayed clinics when filtered clinics or page changes
   useEffect(() => {
@@ -833,72 +827,6 @@ export default function PatientView() {
     }
   }, [appointmentToReschedule, timeSlots, selectedTimeSlot, selectedDate])
 
-  const requestLocationPermission = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          })
-          setLocationPermission('granted')
-        },
-        (error) => {
-          console.error('Location permission denied or error:', error)
-          setLocationPermission('denied')
-        }
-      )
-    } else {
-      setLocationPermission('not-supported')
-    }
-  }
-
-  const geocodeAddress = async (address) => {
-    // Check cache first
-    if (clinicCoordinates[address]) {
-      return clinicCoordinates[address]
-    }
-    
-    try {
-      // Use OpenStreetMap Nominatim API (free, no API key required)
-      // Add a small delay to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'ClinicBookingApp/1.0'
-          }
-        }
-      )
-      const data = await response.json()
-      if (data && data.length > 0) {
-        const coords = {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon)
-        }
-        // Cache by address
-        setClinicCoordinates(prev => ({ ...prev, [address]: coords }))
-        return coords
-      }
-    } catch (err) {
-      console.error('Geocoding error:', err)
-    }
-    return null
-  }
-
-  const calculateDistance = (lat1, lng1, lat2, lng2) => {
-    const R = 6371 // Earth's radius in km
-    const dLat = (lat2 - lat1) * Math.PI / 180
-    const dLng = (lng2 - lng1) * Math.PI / 180
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c // Distance in km
-  }
 
   const fetchClinics = async () => {
     try {
@@ -959,50 +887,6 @@ export default function PatientView() {
       if (doctor && doctor.assignedClinic) {
         filtered = filtered.filter(c => c.id === doctor.assignedClinic)
       }
-    }
-
-    // Sort by distance if location is available
-    if (userLocation) {
-      // Geocode addresses and calculate distances (with caching)
-      const clinicsWithDistance = await Promise.all(
-        filtered.map(async (clinic) => {
-          // Check cache by clinic ID first, then by address
-          let coords = clinicCoordinates[clinic.id] || clinicCoordinates[clinic.address]
-          if (!coords) {
-            coords = await geocodeAddress(clinic.address)
-            if (coords) {
-              // Cache by both ID and address
-              setClinicCoordinates(prev => ({ 
-                ...prev, 
-                [clinic.id]: coords,
-                [clinic.address]: coords
-              }))
-            }
-          }
-          
-          let distance = null
-          if (coords && userLocation) {
-            distance = calculateDistance(
-              userLocation.lat,
-              userLocation.lng,
-              coords.lat,
-              coords.lng
-            )
-          }
-          
-          return { ...clinic, distance }
-        })
-      )
-      
-      // Sort by distance (null distances go to end)
-      clinicsWithDistance.sort((a, b) => {
-        if (a.distance === null && b.distance === null) return 0
-        if (a.distance === null) return 1
-        if (b.distance === null) return -1
-        return a.distance - b.distance
-      })
-      
-      filtered = clinicsWithDistance
     }
 
     setFilteredClinics(filtered)
@@ -1760,23 +1644,12 @@ export default function PatientView() {
                         </div>
                       </div>
                     </div>
-                    {locationPermission === 'denied' && (
-                      <div className="location-warning">
-                        <p>📍 Location permission denied. Clinics will not be sorted by distance.</p>
-                        <button onClick={requestLocationPermission} className="btn btn-secondary btn-sm">
-                          Request Location Again
-                        </button>
-                      </div>
-                    )}
                   </div>
 
                   {/* Clinic Selection */}
                   <div className="section-card">
                     <div className="section-header">
                       <h2>Select Clinic</h2>
-                      {userLocation && (
-                        <span className="location-badge">📍 Sorted by distance</span>
-                      )}
                     </div>
                     {loading ? (
                       <div className="loading">Loading clinics...</div>
@@ -1802,11 +1675,6 @@ export default function PatientView() {
                                 {clinic.region && <p><strong>Region:</strong> {clinic.region}</p>}
                                 {clinic.specialty && <p><strong>Specialty:</strong> {clinic.specialty}</p>}
                                 {clinic.telephoneNo && <p><strong>Phone:</strong> {clinic.telephoneNo}</p>}
-                                {clinic.distance !== null && clinic.distance !== undefined && (
-                                  <p className="distance-info">
-                                    <strong>Distance:</strong> {clinic.distance.toFixed(2)} km away
-                                  </p>
-                                )}
                                 {formatOpeningHours(clinic) && (
                                   <div className="opening-hours">
                                     <p><strong>Opening Hours:</strong></p>
@@ -2626,6 +2494,24 @@ export default function PatientView() {
                   <div className="form-group">
                     <label>Role</label>
                     <input type="text" value={userProfile?.role || ''} disabled />
+                  </div>
+                  <div className="form-group">
+                    <label>IC Number</label>
+                    <input type="text" value={patientData?.patientIc || ''} disabled />
+                  </div>
+                  <div className="form-group">
+                    <label>Date of Birth</label>
+                    <input 
+                      type="text" 
+                      value={patientData?.dateOfBirth 
+                        ? new Date(patientData.dateOfBirth + 'T00:00:00').toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })
+                        : ''} 
+                      disabled 
+                    />
                   </div>
                 </div>
               </div>
