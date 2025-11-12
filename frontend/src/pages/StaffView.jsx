@@ -969,15 +969,15 @@ export default function StaffView() {
     }
   }
 
-  // Mark appointment as MISSED (for appointments that never showed up)
+  // Mark appointment as NO_SHOW (for appointments that never showed up)
   const markAppointmentAsMissed = async (appointmentId) => {
     try {
       setLoading(true)
-      await appointmentAPI.updateStatus(appointmentId, 'MISSED')
-      showToast('Appointment marked as missed', 'success')
+      await appointmentAPI.updateStatus(appointmentId, 'no-show')
+      showToast('Appointment marked as no-show', 'success')
       await fetchAppointments()
     } catch (err) {
-      showToast(err.message || 'Failed to mark appointment as missed', 'error')
+      showToast(err.message || 'Failed to mark appointment as no-show', 'error')
     } finally {
       setLoading(false)
     }
