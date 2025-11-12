@@ -182,6 +182,11 @@ export default function StaffView() {
     }
   }
 
+  // Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    return new Date().toISOString().split('T')[0]
+  }
+
   // Reset manual check-in modal
   const resetManualCheckInModal = () => {
     setShowManualCheckInModal(false)
@@ -200,7 +205,7 @@ export default function StaffView() {
     })
     setCheckInAppointmentData({
       doctorId: null,
-      date: '',
+      date: getTodayDate(),
       timeSlot: null,
       priority: 1,
     })
@@ -1732,7 +1737,15 @@ export default function StaffView() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowManualCheckInModal(true)}
+                  onClick={() => {
+                    setCheckInAppointmentData({
+                      doctorId: null,
+                      date: getTodayDate(),
+                      timeSlot: null,
+                      priority: 1,
+                    })
+                    setShowManualCheckInModal(true)
+                  }}
                   className="btn btn-primary"
                   disabled={loading}
                 >

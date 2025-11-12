@@ -119,8 +119,7 @@ export default function StaffDisplay() {
                 <div key={entry.queueId} className={`queue-item-display ${index === 0 ? 'next-up' : ''}`}>
                   <div className="queue-position">{index + 1}</div>
                   <div className="queue-info">
-                    <div className="queue-appointment-id">Appointment #{entry.appointmentId}</div>
-                    <div className="queue-patient-name">{entry.patientName || 'N/A'}</div>
+                    <div className="queue-appointment-id">#{entry.appointmentId}</div>
                   </div>
                   {index === 0 && <div className="next-badge">Next</div>}
                 </div>
@@ -141,8 +140,7 @@ export default function StaffDisplay() {
               {missed.map((entry) => (
                 <div key={entry.queueId} className="missed-item-display">
                   <div className="missed-info">
-                    <div className="missed-appointment-id">Appointment #{entry.appointmentId}</div>
-                    <div className="missed-patient-name">{entry.patientName || 'N/A'}</div>
+                    <div className="missed-appointment-id">#{entry.appointmentId}</div>
                   </div>
                 </div>
               ))}
