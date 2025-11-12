@@ -4,7 +4,6 @@ import { appointmentAPI, queueAPI, adminAPI, clinicAPI, doctorAPI } from '../lib
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
 import { useLocation } from 'react-router-dom'
-import PatientProfile from './PatientProfile'
 import './PatientView.css'
 
 export default function PatientView() {
@@ -97,6 +96,17 @@ export default function PatientView() {
   const [userLocation, setUserLocation] = useState(null)
   const [locationPermission, setLocationPermission] = useState(null)
   const [clinicCoordinates, setClinicCoordinates] = useState({})
+  
+  // Patient profile data state
+  const [patientData, setPatientData] = useState(null)
+  const [patientFormData, setPatientFormData] = useState({
+    emergencyContact: '',
+    emergencyContactPhone: '',
+    medicalHistory: '',
+    allergies: '',
+    bloodType: ''
+  })
+  const [updatingProfile, setUpdatingProfile] = useState(false)
 
   useEffect(() => {
     // Use userId or patientId (Patient model might use either)
@@ -605,8 +615,77 @@ export default function PatientView() {
     }
   }
 
+  // Fetch patient data for settings
+  const fetchPatientData = async () => {
+    try {
+      setUpdatingProfile(true)
+      const patientId = userProfile?.patientId || userProfile?.userId
+      if (!patientId) {
+        showToast('Unable to load patient data: Patient ID not found', 'error')
+        return
+      }
+      
+      const data = await adminAPI.getPatientById(patientId)
+      setPatientData(data)
+      
+      // Populate form with existing data
+      setPatientFormData({
+        emergencyContact: data.emergencyContact || '',
+        emergencyContactPhone: data.emergencyContactPhone || '',
+        medicalHistory: data.medicalHistory || '',
+        allergies: data.allergies || '',
+        bloodType: data.bloodType || ''
+      })
+    } catch (err) {
+      showToast('Failed to load patient data', 'error')
+      console.error(err)
+    } finally {
+      setUpdatingProfile(false)
+    }
+  }
+
+  const handlePatientInputChange = (e) => {
+    const { name, value } = e.target
+    setPatientFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handlePatientFormSubmit = async (e) => {
+    e.preventDefault()
+    
+    try {
+      setUpdatingProfile(true)
+      const patientId = userProfile?.patientId || userProfile?.userId
+      if (!patientId) {
+        showToast('Unable to update: Patient ID not found', 'error')
+        return
+      }
+
+      // Prepare update data - only include fields that can be updated
+      const updateData = {
+        emergencyContact: patientFormData.emergencyContact || null,
+        emergencyContactPhone: patientFormData.emergencyContactPhone || null,
+        medicalHistory: patientFormData.medicalHistory || null,
+        allergies: patientFormData.allergies || null,
+        bloodType: patientFormData.bloodType || null
+      }
+
+      await adminAPI.updatePatient(patientId, updateData)
+      showToast('Profile updated successfully!', 'success')
+      
+      // Refresh patient data
+      await fetchPatientData()
+    } catch (err) {
+      showToast(err.message || 'Failed to update profile', 'error')
+      console.error(err)
+    } finally {
+      setUpdatingProfile(false)
+    }
+  }
+
   const getCurrentView = () => {
-    if (location.pathname.includes('/profile')) return 'profile'
     if (location.pathname.includes('/medical-history')) return 'medical-history'
     if (location.pathname.includes('/appointments') || location.pathname.includes('/book')) return 'appointments'
     if (location.pathname.includes('/settings')) return 'settings'
@@ -632,8 +711,10 @@ export default function PatientView() {
     } else if (currentView === 'medical-history') {
       fetchClinics()
       fetchDoctors()
+    } else if (currentView === 'settings' && userProfile) {
+      fetchPatientData()
     }
-  }, [location.pathname])
+  }, [location.pathname, userProfile])
 
   // Filter clinics when filters change
   useEffect(() => {
@@ -1308,10 +1389,6 @@ export default function PatientView() {
     )
   }
 
-  // If on profile page, render PatientProfile component
-  if (getCurrentView() === 'profile') {
-    return <PatientProfile />
-  }
 
   return (
     <div className="patient-view">
@@ -2530,6 +2607,7 @@ export default function PatientView() {
               <div className="page-header">
                 <h1>Settings</h1>
               </div>
+              
               <div className="section-card">
                 <h2>Profile Information</h2>
                 <div className="settings-form">
@@ -2550,6 +2628,100 @@ export default function PatientView() {
                     <input type="text" value={userProfile?.role || ''} disabled />
                   </div>
                 </div>
+              </div>
+
+              <div className="section-card">
+                <h2>Patient Information</h2>
+                {updatingProfile && !patientData ? (
+                  <div className="loading">Loading...</div>
+                ) : (
+                  <form onSubmit={handlePatientFormSubmit} className="profile-form">
+                    <div className="form-group">
+                      <label htmlFor="emergencyContact">Emergency Contact Name</label>
+                      <input
+                        type="text"
+                        id="emergencyContact"
+                        name="emergencyContact"
+                        value={patientFormData.emergencyContact}
+                        onChange={handlePatientInputChange}
+                        placeholder="Enter emergency contact name"
+                        maxLength={100}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="emergencyContactPhone">Emergency Contact Phone</label>
+                      <input
+                        type="tel"
+                        id="emergencyContactPhone"
+                        name="emergencyContactPhone"
+                        value={patientFormData.emergencyContactPhone}
+                        onChange={handlePatientInputChange}
+                        placeholder="Enter emergency contact phone"
+                        pattern="^[+]?[0-9\s\-()]{8,20}$"
+                      />
+                      <small className="form-hint">Format: +1234567890 or 123-456-7890</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="medicalHistory">Medical History</label>
+                      <textarea
+                        id="medicalHistory"
+                        name="medicalHistory"
+                        value={patientFormData.medicalHistory}
+                        onChange={handlePatientInputChange}
+                        placeholder="Enter your medical history"
+                        rows={6}
+                        maxLength={2000}
+                      />
+                      <small className="form-hint">Maximum 2000 characters</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="allergies">Allergies</label>
+                      <textarea
+                        id="allergies"
+                        name="allergies"
+                        value={patientFormData.allergies}
+                        onChange={handlePatientInputChange}
+                        placeholder="Enter any allergies or reactions"
+                        rows={4}
+                        maxLength={1000}
+                      />
+                      <small className="form-hint">Maximum 1000 characters</small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="bloodType">Blood Type</label>
+                      <select
+                        id="bloodType"
+                        name="bloodType"
+                        value={patientFormData.bloodType}
+                        onChange={handlePatientInputChange}
+                      >
+                        <option value="">Select blood type</option>
+                        <option value="A+">A+</option>
+                        <option value="A-">A-</option>
+                        <option value="B+">B+</option>
+                        <option value="B-">B-</option>
+                        <option value="AB+">AB+</option>
+                        <option value="AB-">AB-</option>
+                        <option value="O+">O+</option>
+                        <option value="O-">O-</option>
+                      </select>
+                    </div>
+
+                    <div className="form-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={updatingProfile}
+                      >
+                        {updatingProfile ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </>
           )}
