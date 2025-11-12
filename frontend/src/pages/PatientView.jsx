@@ -2550,7 +2550,7 @@ export default function PatientView() {
                         placeholder="Enter emergency contact phone"
                         pattern="^[+]?[0-9\s\-()]{8,20}$"
                       />
-                      <small className="form-hint">Format: +1234567890 or 123-456-7890</small>
+                      <small className="form-hint">Format: +65 92345678 or 92345678</small>
                     </div>
 
                     <div className="form-group">
