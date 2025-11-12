@@ -113,7 +113,7 @@ public class PdfGenerator {
 
         // Add data rows
         addTableRow(table, "Patients Seen", String.valueOf(report.getPatientsSeen()));
-        addTableRow(table, "Average Wait Time", String.format("%.2f minutes", report.getAvgWaitTimeMinutes()));
+        addTableRow(table, "Average Wait Time", formatWaitTime(report.getAvgWaitTimeMinutes()));
         addTableRow(table, "No-Show Rate", String.format("%.2f%%", report.getNoShowRatePercent()));
 
         document.add(table);
@@ -157,6 +157,42 @@ public class PdfGenerator {
         
         table.addCell(cell1);
         table.addCell(cell2);
+    }
+
+    /**
+     * Format wait time in minutes to "X minute(s) Y second(s)" format
+     *
+     * @param minutes Wait time in fractional minutes
+     * @return Formatted string like "1 minute 40 seconds" or "2 minutes 7 seconds"
+     */
+    private static String formatWaitTime(double minutes) {
+        if (minutes == 0.0) {
+            return "0 minutes";
+        }
+        
+        int totalSeconds = (int) Math.round(minutes * 60);
+        int mins = totalSeconds / 60;
+        int secs = totalSeconds % 60;
+        
+        StringBuilder result = new StringBuilder();
+        
+        if (mins > 0) {
+            result.append(mins).append(mins == 1 ? " minute" : " minutes");
+        }
+        
+        if (secs > 0) {
+            if (mins > 0) {
+                result.append(" ");
+            }
+            result.append(secs).append(secs == 1 ? " second" : " seconds");
+        }
+        
+        // If both are 0 (shouldn't happen, but handle edge case)
+        if (result.length() == 0) {
+            return "0 minutes";
+        }
+        
+        return result.toString();
     }
 
     /**
@@ -238,7 +274,7 @@ public class PdfGenerator {
         addTableRow(table, "Total Appointments Booked", String.valueOf(report.getTotalAppointments()));
         addTableRow(table, "Total Cancellations", String.valueOf(report.getTotalCancellations()));
         addTableRow(table, "Patients Seen", String.valueOf(report.getPatientsSeen()));
-        addTableRow(table, "Average Waiting Time (minutes)", String.format("%.2f", report.getAvgWaitTimeMinutes()));
+        addTableRow(table, "Average Waiting Time", formatWaitTime(report.getAvgWaitTimeMinutes()));
         addTableRow(table, "No-Show Rate (%)", String.format("%.2f", report.getNoShowRatePercent()));
 
         document.add(table);

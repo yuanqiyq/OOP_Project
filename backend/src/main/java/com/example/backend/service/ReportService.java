@@ -49,7 +49,7 @@ public class ReportService {
      * Generate a daily report for a specific clinic
      *
      * @param clinicId The clinic ID
-     * @param date The report date (defaults to today if null)
+     * @param date     The report date (defaults to today if null)
      * @return DailyReport with aggregated metrics
      */
     public DailyReport generateReport(Long clinicId, LocalDate date) {
@@ -84,7 +84,7 @@ public class ReportService {
      * Get count of patients seen (completed queue entries) for a specific date
      *
      * @param clinicId The clinic ID
-     * @param date The date to query
+     * @param date     The date to query
      * @return Count of patients with DONE status
      */
     public int getPatientsSeen(Long clinicId, LocalDate date) {
@@ -106,10 +106,11 @@ public class ReportService {
 
     /**
      * Calculate average wait time in minutes for completed appointments
-     * Wait time = time from queue check-in (created_at) to when appointment actually starts (appointment_start)
+     * Wait time = time from queue check-in (created_at) to when appointment
+     * actually starts (appointment_start)
      *
      * @param clinicId The clinic ID
-     * @param date The date to query
+     * @param date     The date to query
      * @return Average wait time in minutes
      */
     public double getAverageWaitTime(Long clinicId, LocalDate date) {
@@ -118,23 +119,26 @@ public class ReportService {
 
         // Get all completed queue logs for the date
         List<QueueLog> queueLogs = queueRepository.findByClinicId(clinicId);
-        
-        List<Long> waitTimes = new ArrayList<>();
+
+        List<Double> waitTimes = new ArrayList<>();
 
         for (QueueLog queueLog : queueLogs) {
             // Filter by date and DONE status
-            if (queueLog.getCreatedAt() != null && 
-                !queueLog.getCreatedAt().isBefore(startOfDay) && 
-                queueLog.getCreatedAt().isBefore(endOfDay) &&
-                QueueLog.STATUS_DONE.equals(queueLog.getStatus())) {
-                
-                // Calculate wait time: from check-in (created_at) to when appointment actually starts (appointment_start)
+            if (queueLog.getCreatedAt() != null &&
+                    !queueLog.getCreatedAt().isBefore(startOfDay) &&
+                    queueLog.getCreatedAt().isBefore(endOfDay) &&
+                    QueueLog.STATUS_DONE.equals(queueLog.getStatus())) {
+
+                // Calculate wait time: from check-in (created_at) to when appointment actually
+                // starts (appointment_start)
                 LocalDateTime checkInTime = queueLog.getCreatedAt();
                 LocalDateTime appointmentStartTime = queueLog.getAppointmentStart();
-                
+
                 // Only calculate if appointment_start is set and after check-in
                 if (appointmentStartTime != null && appointmentStartTime.isAfter(checkInTime)) {
-                    long waitMinutes = ChronoUnit.MINUTES.between(checkInTime, appointmentStartTime);
+                    // Calculate in seconds first, then convert to fractional minutes
+                    long waitSeconds = ChronoUnit.SECONDS.between(checkInTime, appointmentStartTime);
+                    double waitMinutes = waitSeconds / 60.0;
                     waitTimes.add(waitMinutes);
                 }
             }
@@ -145,7 +149,7 @@ public class ReportService {
             return 0.0;
         }
 
-        double sum = waitTimes.stream().mapToLong(Long::longValue).sum();
+        double sum = waitTimes.stream().mapToDouble(Double::doubleValue).sum();
         return sum / waitTimes.size();
     }
 
@@ -154,7 +158,7 @@ public class ReportService {
      * No-show = appointments explicitly marked with NO_SHOW status
      *
      * @param clinicId The clinic ID
-     * @param date The date to query
+     * @param date     The date to query
      * @return No-show rate as percentage
      */
     public double getNoShowRate(Long clinicId, LocalDate date) {
@@ -163,8 +167,7 @@ public class ReportService {
 
         // Get all appointments for the clinic on that date
         List<Appointment> appointments = appointmentRepository.findByClinicIdAndDateTimeBetween(
-            clinicId, startOfDay, endOfDay
-        );
+                clinicId, startOfDay, endOfDay);
 
         if (appointments.isEmpty()) {
             return 0.0;
