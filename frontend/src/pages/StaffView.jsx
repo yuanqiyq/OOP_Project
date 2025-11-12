@@ -1047,13 +1047,13 @@ export default function StaffView() {
     )
   }
 
-  // Get upcoming appointments (future appointments that are not cancelled or completed)
+  // Get upcoming appointments (future appointments that are not cancelled, completed, or no-show)
   const getUpcomingAppointments = () => {
     const now = new Date()
     const upcoming = appointments.filter(apt => {
-      // First check status - cancelled and completed should never be in upcoming
+      // First check status - cancelled, completed, and no-show should never be in upcoming
       const status = apt.apptStatus?.toUpperCase() || ''
-      if (status === 'CANCELLED' || status === 'COMPLETED') {
+      if (status === 'CANCELLED' || status === 'COMPLETED' || status === 'NO-SHOW' || status === 'NO_SHOW') {
         return false
       }
       // Then check if it's a future appointment
@@ -1072,11 +1072,11 @@ export default function StaffView() {
     return applyFilters(history)
   }
 
-  // Get cancelled appointments (all appointments with CANCELLED status, regardless of date)
+  // Get cancelled appointments (all appointments with CANCELLED or NO-SHOW status, regardless of date)
   const getCancelledAppointments = () => {
     const cancelled = appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
-      return status === 'CANCELLED'
+      return status === 'CANCELLED' || status === 'NO-SHOW' || status === 'NO_SHOW'
     })
     return applyFilters(cancelled)
   }
