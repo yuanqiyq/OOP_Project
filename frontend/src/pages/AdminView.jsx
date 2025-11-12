@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { adminAPI, userAPI, clinicAPI, doctorAPI, reportAPI } from '../lib/api'
+import { adminAPI, userAPI, clinicAPI, doctorAPI, reportAPI, appointmentAPI } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+} from 'recharts'
 import './AdminView.css'
 
 export default function AdminView() {
@@ -62,6 +77,19 @@ export default function AdminView() {
     totalStaff: 0,
     totalPatients: 0,
   })
+  const [appointments, setAppointments] = useState([])
+  const [dashboardStats, setDashboardStats] = useState({
+    totalAppointments: 0,
+    scheduledAppointments: 0,
+    completedAppointments: 0,
+    cancelledAppointments: 0,
+    totalClinics: 0,
+    totalDoctors: 0,
+    appointmentsByStatus: {},
+    appointmentsByClinic: {},
+    appointmentsOverTime: [],
+    userGrowth: [],
+  })
   
   // User management state
   const [expandedUsers, setExpandedUsers] = useState(new Set())
@@ -75,7 +103,6 @@ export default function AdminView() {
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
   const [showCreatePatient, setShowCreatePatient] = useState(false)
   const [selectedClinicId, setSelectedClinicId] = useState(969)
-  const [testEndpoint, setTestEndpoint] = useState('')
   
   const [staffFormData, setStaffFormData] = useState({
     email: '',
@@ -116,6 +143,13 @@ export default function AdminView() {
   useEffect(() => {
     fetchAllData()
   }, [])
+
+  useEffect(() => {
+    if (appointments.length > 0 || users.length > 0) {
+      calculateDashboardStats(appointments)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointments, users, clinics, doctors])
 
   // Handle clicks outside expanded rows to close them
   useEffect(() => {
@@ -165,7 +199,82 @@ export default function AdminView() {
       fetchPatients(),
       fetchClinics(),
       fetchDoctors(),
+      fetchAppointments(),
     ])
+  }
+
+  const fetchAppointments = async () => {
+    try {
+      const data = await appointmentAPI.getAll()
+      setAppointments(data || [])
+      calculateDashboardStats(data || [])
+    } catch (err) {
+      console.error('Failed to load appointments', err)
+    }
+  }
+
+  const calculateDashboardStats = (appts) => {
+    const now = new Date()
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    
+    // Status breakdown
+    const statusCounts = {}
+    appts.forEach(apt => {
+      const status = apt.apptStatus || 'UNKNOWN'
+      statusCounts[status] = (statusCounts[status] || 0) + 1
+    })
+
+    // Clinic breakdown
+    const clinicCounts = {}
+    appts.forEach(apt => {
+      const clinicId = apt.clinicId
+      if (clinicId) {
+        clinicCounts[clinicId] = (clinicCounts[clinicId] || 0) + 1
+      }
+    })
+
+    // Appointments over time (last 30 days)
+    const timeSeries = {}
+    appts.forEach(apt => {
+      if (apt.dateTime) {
+        const date = new Date(apt.dateTime)
+        if (date >= thirtyDaysAgo) {
+          const dateKey = date.toISOString().split('T')[0]
+          timeSeries[dateKey] = (timeSeries[dateKey] || 0) + 1
+        }
+      }
+    })
+    const appointmentsOverTime = Object.keys(timeSeries)
+      .sort()
+      .map(date => ({ date, count: timeSeries[date] }))
+
+    // User growth over time
+    const userGrowth = {}
+    users.forEach(user => {
+      if (user.createdAt) {
+        const date = new Date(user.createdAt)
+        if (date >= thirtyDaysAgo) {
+          const dateKey = date.toISOString().split('T')[0]
+          userGrowth[dateKey] = (userGrowth[dateKey] || 0) + 1
+        }
+      }
+    })
+    const userGrowthData = Object.keys(userGrowth)
+      .sort()
+      .map(date => ({ date, count: userGrowth[date] }))
+
+    setDashboardStats({
+      totalAppointments: appts.length,
+      scheduledAppointments: statusCounts.SCHEDULED || 0,
+      completedAppointments: statusCounts.COMPLETED || 0,
+      cancelledAppointments: statusCounts.CANCELLED || 0,
+      totalClinics: clinics.length,
+      totalDoctors: doctors.length,
+      appointmentsByStatus: statusCounts,
+      appointmentsByClinic: clinicCounts,
+      appointmentsOverTime,
+      userGrowth: userGrowthData,
+    })
   }
 
   const fetchUsers = async () => {
@@ -630,32 +739,6 @@ export default function AdminView() {
     }
   }
 
-  const testBackendEndpoint = async () => {
-    if (!testEndpoint) {
-      setError('Please enter an endpoint')
-      return
-    }
-
-    try {
-      setLoading(true)
-      const response = await fetch(`http://localhost:8080/api${testEndpoint}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      
-      const data = await response.json().catch(() => null)
-      
-      if (response.ok) {
-        setSuccess(`✅ Success: ${JSON.stringify(data, null, 2).substring(0, 200)}`)
-      } else {
-        setError(`❌ Error ${response.status}: ${JSON.stringify(data, null, 2).substring(0, 200)}`)
-      }
-    } catch (err) {
-      setError(`Failed to test endpoint: ${err.message}`)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleUpdateClinicInterval = async (clinicId) => {
     if (!editingInterval || isNaN(editingInterval) || parseInt(editingInterval) <= 0) {
@@ -1342,10 +1425,305 @@ export default function AdminView() {
           {currentView === 'dashboard' && (
             <>
               <div className="page-header">
-                <div>
-                  <h1>Admin Dashboard</h1>
-                  <p className="subtitle">System Overview & Management</p>
+                <h1>Admin Dashboard</h1>
+              </div>
+
+              {/* Charts Grid */}
+              <div className="charts-grid">
+                {/* Appointments by Status Chart */}
+                <div className="section-card chart-card">
+                  <h2>Appointments by Status</h2>
+                  <div className="chart-container">
+                    {Object.keys(dashboardStats.appointmentsByStatus).length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={Object.entries(dashboardStats.appointmentsByStatus).map(([status, count]) => ({
+                              name: status,
+                              value: count,
+                            }))}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                            animationBegin={0}
+                            animationDuration={800}
+                            animationEasing="ease-out"
+                          >
+                            {Object.keys(dashboardStats.appointmentsByStatus).map((status, index) => {
+                              const colors = ['#4ECDC4', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#FFD93D']
+                              return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                            })}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: '#fff',
+                              border: '1px solid rgba(78, 205, 196, 0.2)',
+                              borderRadius: '8px',
+                              padding: '8px 12px'
+                            }}
+                            formatter={(value, name) => [value, name]}
+                          />
+                          <Legend 
+                            verticalAlign="bottom" 
+                            height={36}
+                            formatter={(value) => `${value}: ${dashboardStats.appointmentsByStatus[value] || 0}`}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="no-data">No appointment data available</div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Appointments Over Time Chart */}
+                <div className="section-card chart-card">
+                  <h2>Appointments Over Time (Last 30 Days)</h2>
+                  <div className="chart-container">
+                    {dashboardStats.appointmentsOverTime.length > 0 ? (
+                      <>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <AreaChart
+                            data={dashboardStats.appointmentsOverTime.map(d => ({
+                              date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                              appointments: d.count,
+                            }))}
+                            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                          >
+                            <defs>
+                              <linearGradient id="colorAppointments" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#4ECDC4" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="#4ECDC4" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                            <XAxis 
+                              dataKey="date" 
+                              stroke="#666"
+                              tick={{ fontSize: 12 }}
+                            />
+                            <YAxis 
+                              stroke="#666"
+                              tick={{ fontSize: 12 }}
+                            />
+                            <Tooltip 
+                              contentStyle={{
+                                backgroundColor: '#fff',
+                                border: '1px solid rgba(78, 205, 196, 0.2)',
+                                borderRadius: '8px',
+                                padding: '8px 12px'
+                              }}
+                              animationDuration={200}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="appointments"
+                              stroke="#4ECDC4"
+                              strokeWidth={3}
+                              fillOpacity={1}
+                              fill="url(#colorAppointments)"
+                              animationBegin={0}
+                              animationDuration={1000}
+                              animationEasing="ease-out"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                        <div className="chart-stats">
+                          <div className="chart-stat-item">
+                            <span className="stat-label">Total (30 days):</span>
+                            <span className="stat-value">{dashboardStats.appointmentsOverTime.reduce((sum, d) => sum + d.count, 0)}</span>
+                          </div>
+                          <div className="chart-stat-item">
+                            <span className="stat-label">Average per day:</span>
+                            <span className="stat-value">{(dashboardStats.appointmentsOverTime.reduce((sum, d) => sum + d.count, 0) / dashboardStats.appointmentsOverTime.length).toFixed(1)}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="no-data">No data available for the last 30 days</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Appointments by Clinic Chart */}
+                <div className="section-card chart-card">
+                  <h2>Appointments by Clinic</h2>
+                  <div className="chart-container">
+                    {Object.keys(dashboardStats.appointmentsByClinic).length > 0 ? (
+                      <ResponsiveContainer width="100%" height={350}>
+                        <BarChart
+                          data={Object.entries(dashboardStats.appointmentsByClinic)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 10)
+                            .map(([clinicId, count]) => {
+                              const clinic = clinics.find(c => c.id === Number(clinicId))
+                              return {
+                                name: clinic ? clinic.name : `Clinic ${clinicId}`,
+                                appointments: count,
+                              }
+                            })}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis 
+                            dataKey="name" 
+                            angle={-45}
+                            textAnchor="end"
+                            height={80}
+                            stroke="#666"
+                            tick={{ fontSize: 11 }}
+                          />
+                          <YAxis 
+                            stroke="#666"
+                            tick={{ fontSize: 12 }}
+                          />
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: '#fff',
+                              border: '1px solid rgba(78, 205, 196, 0.2)',
+                              borderRadius: '8px',
+                              padding: '8px 12px'
+                            }}
+                            animationDuration={200}
+                          />
+                          <Bar
+                            dataKey="appointments"
+                            fill="#4ECDC4"
+                            radius={[8, 8, 0, 0]}
+                            animationBegin={0}
+                            animationDuration={1000}
+                            animationEasing="ease-out"
+                          >
+                            {Object.entries(dashboardStats.appointmentsByClinic)
+                              .sort((a, b) => b[1] - a[1])
+                              .slice(0, 10)
+                              .map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill="#4ECDC4" />
+                              ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="no-data">No appointment data by clinic</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* User Roles Distribution Chart */}
+                <div className="section-card chart-card">
+                  <h2>User Roles Distribution</h2>
+                  <div className="chart-container">
+                    {stats.totalUsers > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Patients', value: users.filter(u => u.role === 'PATIENT').length },
+                              { name: 'Staff', value: users.filter(u => u.role === 'STAFF').length },
+                              { name: 'Admins', value: users.filter(u => u.role === 'ADMIN').length },
+                            ].filter(item => item.value > 0)}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                            outerRadius={100}
+                            fill="#8884d8"
+                            dataKey="value"
+                            animationBegin={0}
+                            animationDuration={800}
+                            animationEasing="ease-out"
+                          >
+                            <Cell fill="#4ECDC4" />
+                            <Cell fill="#95E1D3" />
+                            <Cell fill="#F38181" />
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{
+                              backgroundColor: '#fff',
+                              border: '1px solid rgba(78, 205, 196, 0.2)',
+                              borderRadius: '8px',
+                              padding: '8px 12px'
+                            }}
+                            formatter={(value, name) => [value, name]}
+                          />
+                          <Legend 
+                            verticalAlign="bottom" 
+                            height={36}
+                            formatter={(value) => {
+                              const roleCounts = {
+                                'Patients': users.filter(u => u.role === 'PATIENT').length,
+                                'Staff': users.filter(u => u.role === 'STAFF').length,
+                                'Admins': users.filter(u => u.role === 'ADMIN').length,
+                              }
+                              return `${value}: ${roleCounts[value] || 0}`
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="no-data">No user data available</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-icon">👥</div>
+                  <div className="stat-content">
+                    <h3>{stats.totalUsers}</h3>
+                    <p>Total Users</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">👨‍💼</div>
+                  <div className="stat-content">
+                    <h3>{stats.totalStaff}</h3>
+                    <p>Staff & Admin</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">🏥</div>
+                  <div className="stat-content">
+                    <h3>{stats.totalPatients}</h3>
+                    <p>Patients</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">📅</div>
+                  <div className="stat-content">
+                    <h3>{dashboardStats.totalAppointments}</h3>
+                    <p>Total Appointments</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">🏢</div>
+                  <div className="stat-content">
+                    <h3>{dashboardStats.totalClinics}</h3>
+                    <p>Clinics</p>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon">📊</div>
+                  <div className="stat-content">
+                    <h3>{dashboardStats.scheduledAppointments}</h3>
+                    <p>Scheduled</p>
+                  </div>
+                </div>
+              </div>
+
+            </>
+          )}
+
+          {currentView === 'users' && (
+            <>
+              <div className="page-header">
+                <h1>User Management</h1>
                 <div className="header-actions">
                   <button
                     onClick={() => {
@@ -1377,34 +1755,6 @@ export default function AdminView() {
                   >
                     {showCreatePatient ? 'Cancel' : '+ Patient'}
                   </button>
-                  <button onClick={fetchAllData} className="btn btn-secondary">
-                    🔄 Refresh All
-                  </button>
-                </div>
-              </div>
-
-              {/* Stats Grid */}
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon">👥</div>
-                  <div className="stat-content">
-                    <h3>{stats.totalUsers}</h3>
-                    <p>Total Users</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">👨‍💼</div>
-                  <div className="stat-content">
-                    <h3>{stats.totalStaff}</h3>
-                    <p>Staff & Admin</p>
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">🏥</div>
-                  <div className="stat-content">
-                    <h3>{stats.totalPatients}</h3>
-                    <p>Patients</p>
-                  </div>
                 </div>
               </div>
 
@@ -1775,101 +2125,6 @@ export default function AdminView() {
                   </form>
                 </div>
               )}
-
-              {/* Quick Actions */}
-              <div className="section-card">
-                <h2>Quick Actions</h2>
-                <div className="quick-actions-grid">
-                  <button onClick={fetchUsers} className="action-card">
-                    <span className="action-icon">👥</span>
-                    <span className="action-label">Refresh Users</span>
-                  </button>
-                  <button onClick={fetchStaff} className="action-card">
-                    <span className="action-icon">👨‍💼</span>
-                    <span className="action-label">Refresh Staff</span>
-                  </button>
-                  <button onClick={fetchPatients} className="action-card">
-                    <span className="action-icon">🏥</span>
-                    <span className="action-label">Refresh Patients</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Endpoint Testing */}
-              <div className="section-card">
-                <h2>Backend Endpoint Tester</h2>
-                <p className="form-description">
-                  Test any backend endpoint to verify it's working correctly
-                </p>
-                <div className="endpoint-tester">
-                  <div className="endpoint-input-group">
-                    <span className="endpoint-prefix">GET /api</span>
-                    <input
-                      type="text"
-                      value={testEndpoint}
-                      onChange={(e) => setTestEndpoint(e.target.value)}
-                      placeholder="/users"
-                      className="endpoint-input"
-                    />
-                    <button
-                      onClick={testBackendEndpoint}
-                      className="btn btn-primary"
-                      disabled={loading || !testEndpoint}
-                    >
-                      Test
-                    </button>
-                  </div>
-                  <div className="endpoint-examples">
-                    <p className="examples-label">Quick Examples:</p>
-                    <div className="examples-list">
-                      <button
-                        onClick={() => {
-                          setTestEndpoint('/users')
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /users
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTestEndpoint('/admin/staff')
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /admin/staff
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTestEndpoint('/clinics')
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /clinics
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTestEndpoint('/doctors')
-                          testBackendEndpoint()
-                        }}
-                        className="example-btn"
-                      >
-                        /doctors
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {currentView === 'users' && (
-            <>
-              <div className="page-header">
-                <h1>User Management</h1>
-              </div>
 
               <div className="section-card">
                 <div className="section-header">
@@ -3585,31 +3840,6 @@ export default function AdminView() {
                   <div className="form-group">
                     <label>Role</label>
                     <input type="text" value={userProfile?.role || ''} disabled />
-                  </div>
-                </div>
-              </div>
-              <div className="section-card">
-                <h2>System Information</h2>
-                <div className="system-info">
-                  <div className="info-row">
-                    <span className="info-label">Total Users:</span>
-                    <span className="info-value">{stats.totalUsers}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Total Staff:</span>
-                    <span className="info-value">{stats.totalStaff}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Total Patients:</span>
-                    <span className="info-value">{stats.totalPatients}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Total Clinics:</span>
-                    <span className="info-value">{clinics.length}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Total Doctors:</span>
-                    <span className="info-value">{doctors.length}</span>
                   </div>
                 </div>
               </div>

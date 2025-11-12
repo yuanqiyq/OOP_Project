@@ -2184,3 +2184,256 @@
     width: 100%;
   }
 }
+
+/* Charts Grid */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.chart-card {
+  min-height: 400px;
+}
+
+.chart-card h2 {
+  color: var(--teal-dark);
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+}
+
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 300px;
+}
+
+/* Recharts styling overrides */
+.recharts-wrapper {
+  margin: 0 auto;
+}
+
+.recharts-tooltip-wrapper {
+  z-index: 10;
+}
+
+.recharts-legend-wrapper {
+  padding-top: 1rem;
+}
+
+.recharts-cartesian-axis-tick-value {
+  fill: #666;
+}
+
+.recharts-legend-item {
+  margin-right: 1.5rem !important;
+}
+
+.recharts-pie-label-text {
+  fill: #2d2d2d;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* Pie Chart */
+.pie-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 200px;
+  justify-content: center;
+}
+
+.pie-segment {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(90deg, var(--color) 0%, rgba(255, 255, 255, 0.1) 100%);
+  border-left: 4px solid var(--color);
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.pie-segment:hover {
+  transform: translateX(5px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pie-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.pie-label-name {
+  font-weight: 600;
+  color: #2d2d2d;
+  font-size: 0.95rem;
+}
+
+.pie-label-value {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(78, 205, 196, 0.1);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.legend-text {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+/* Line Chart */
+.line-chart {
+  width: 100%;
+  height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(78, 205, 196, 0.02) 0%, rgba(255, 255, 255, 0) 100%);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+}
+
+.chart-stats {
+  display: flex;
+  gap: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(78, 205, 196, 0.1);
+}
+
+.chart-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  color: var(--teal-primary);
+  font-weight: 700;
+}
+
+/* Bar Chart */
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 300px;
+}
+
+.bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bar-label {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+  min-width: 150px;
+}
+
+.bar-wrapper {
+  width: 100%;
+  height: 32px;
+  background: rgba(78, 205, 196, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4ECDC4 0%, #95E1D3 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 0.75rem;
+  transition: width 0.5s ease-out;
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.2);
+}
+
+.bar-value {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* No Data Message */
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: #999;
+  font-size: 1rem;
+  font-style: italic;
+}
+
+/* Responsive Charts */
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .chart-card {
+    min-height: auto;
+  }
+
+  .line-chart {
+    height: 200px;
+  }
+
+  .chart-stats {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .bar-label {
+    min-width: 100px;
+    font-size: 0.85rem;
+  }
+}
