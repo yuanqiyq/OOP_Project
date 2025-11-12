@@ -370,12 +370,16 @@
   background: var(--gradient-glow);
   border-radius: 12px;
   border: 1px solid rgba(78, 205, 196, 0.2);
+  gap: 1rem;
 }
 
 .queue-info-label {
   color: #666;
   font-size: 0.95rem;
   font-weight: 500;
+  word-spacing: 0.1em;
+  letter-spacing: 0.02em;
+  margin-right: 0.5rem;
 }
 
 .queue-info-value {

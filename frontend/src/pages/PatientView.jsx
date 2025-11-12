@@ -1318,31 +1318,35 @@ export default function PatientView() {
                           return (
                             <>
                               <div className="queue-info-item">
-                                <span className="queue-info-label">Doctor</span>
+                                <span className="queue-info-label">Doctor Name:</span>
                                 <span className="queue-info-value">{doctorName}</span>
                               </div>
                               <div className="queue-info-item">
-                                <span className="queue-info-label">Appointment</span>
-                                <span className="queue-info-value">#{selectedAppointment}</span>
+                                <span className="queue-info-label">Appointment #:</span>
+                                <span className="queue-info-value">{selectedAppointment}</span>
                               </div>
                             </>
                           )
-                        })() : (
-                          <>
-                            <div className="queue-info-item">
-                              <span className="queue-info-label">Total in Queue</span>
-                              <span className="queue-info-value">{queuePosition.totalInQueue || 'N/A'}</span>
-                            </div>
-                            <div className="queue-info-item">
-                              <span className="queue-info-label">Status</span>
-                              <span className="queue-status-badge queue-status-in-queue">{queuePosition.status || 'N/A'}</span>
-                            </div>
-                            <div className="queue-info-item">
-                              <span className="queue-info-label">Appointment</span>
-                              <span className="queue-info-value">#{selectedAppointment}</span>
-                            </div>
-                          </>
-                        )}
+                        })() : (() => {
+                          const currentAppointment = appointments.find(apt => apt.appointmentId === selectedAppointment)
+                          const doctorName = currentAppointment?.doctorId ? (doctorNames[currentAppointment.doctorId] || `Doctor #${currentAppointment.doctorId}`) : 'N/A'
+                          return (
+                            <>
+                              <div className="queue-info-item">
+                                <span className="queue-info-label">Total in Queue:</span>
+                                <span className="queue-info-value">{queuePosition.totalInQueue || 'N/A'}</span>
+                              </div>
+                              <div className="queue-info-item">
+                                <span className="queue-info-label">Doctor Name:</span>
+                                <span className="queue-info-value">{doctorName}</span>
+                              </div>
+                              <div className="queue-info-item">
+                                <span className="queue-info-label">Appointment #:</span>
+                                <span className="queue-info-value">{selectedAppointment}</span>
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                   ) : (
