@@ -159,8 +159,8 @@ public class SystemUsageReportService {
     /**
      * Calculate no-show rate
      *
-     * No-show = appointments that have no queue_log entry at all
-     * Rate = (appointments without queue_log) / (total appointments) * 100
+     * No-show = appointments explicitly marked with NO_SHOW status
+     * Rate = (appointments with NO_SHOW status) / (total appointments) * 100
      *
      * @param startDateTime Start of date range
      * @param endDateTime End of date range
@@ -173,12 +173,10 @@ public class SystemUsageReportService {
             return 0.0;
         }
 
-        // Count appointments that have no queue log entry
+        // Count appointments marked as NO_SHOW
         long noShowCount = allAppointments.stream()
-                .filter(appt -> {
-                    List<QueueLog> logs = queueRepository.findByAppointmentId(appt.getAppointmentId());
-                    return logs.isEmpty();
-                })
+                .filter(appt -> appt.getApptStatus() != null)
+                .filter(appt -> appt.getApptStatus().getValue().equalsIgnoreCase("no-show"))
                 .count();
 
         // Calculate percentage

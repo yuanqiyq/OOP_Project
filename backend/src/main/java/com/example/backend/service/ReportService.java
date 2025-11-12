@@ -151,7 +151,7 @@ public class ReportService {
 
     /**
      * Calculate no-show rate as percentage
-     * No-show = appointments scheduled for that date but no queue_log entry exists
+     * No-show = appointments explicitly marked with NO_SHOW status
      *
      * @param clinicId The clinic ID
      * @param date The date to query
@@ -170,14 +170,11 @@ public class ReportService {
             return 0.0;
         }
 
-        // Count appointments without any queue log entry
-        long noShowCount = 0;
-        for (Appointment appointment : appointments) {
-            List<QueueLog> queueLogs = queueRepository.findByAppointmentId(appointment.getAppointmentId());
-            if (queueLogs.isEmpty()) {
-                noShowCount++;
-            }
-        }
+        // Count appointments marked as NO_SHOW
+        long noShowCount = appointments.stream()
+                .filter(appt -> appt.getApptStatus() != null)
+                .filter(appt -> appt.getApptStatus().getValue().equalsIgnoreCase("no-show"))
+                .count();
 
         // Calculate percentage
         return (double) noShowCount / appointments.size() * 100.0;
