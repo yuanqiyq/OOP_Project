@@ -1789,21 +1789,6 @@ export default function StaffView() {
                       >
                         ⚠ Mark as Missed
                       </button>
-                      {queue.length > 0 ? (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            callNextPatient(e)
-                          }}
-                          className="btn btn-primary btn-large"
-                          disabled={loading}
-                          style={{ marginLeft: '0.5rem', cursor: loading ? 'not-allowed' : 'pointer' }}
-                          type="button"
-                        >
-                          Call Next
-                        </button>
-                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -2691,7 +2676,19 @@ export default function StaffView() {
                       <div className="modal-header">
                         <div>
                           <h2>Treatment Summary</h2>
-                          <p className="subtitle" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+                          <p style={{ 
+                            marginTop: '0.5rem', 
+                            marginBottom: 0, 
+                            fontSize: '1.1rem', 
+                            fontWeight: '600', 
+                            color: '#ffffff',
+                            padding: '0.4rem 1rem',
+                            background: 'rgba(78, 205, 196, 0.2)',
+                            border: '1.5px solid var(--teal-primary)',
+                            boxShadow: '0 0 8px rgba(78, 205, 196, 0.6), 0 0 16px rgba(78, 205, 196, 0.4)',
+                            borderRadius: '20px',
+                            display: 'inline-block'
+                          }}>
                             Appointment #{selectedAppointmentForSummary.appointmentId}
                           </p>
                         </div>
