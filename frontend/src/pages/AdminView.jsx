@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { adminAPI, userAPI, clinicAPI, doctorAPI, reportAPI } from '../lib/api'
 import { supabase } from '../lib/supabase'
@@ -63,6 +63,13 @@ export default function AdminView() {
     totalPatients: 0,
   })
   
+  // User management state
+  const [expandedUsers, setExpandedUsers] = useState(new Set())
+  const [editingUserId, setEditingUserId] = useState(null)
+  const [editingUserData, setEditingUserData] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [userToDelete, setUserToDelete] = useState(null)
+  
   // Create forms state
   const [showCreateStaff, setShowCreateStaff] = useState(false)
   const [showCreateAdmin, setShowCreateAdmin] = useState(false)
@@ -109,6 +116,47 @@ export default function AdminView() {
   useEffect(() => {
     fetchAllData()
   }, [])
+
+  // Handle clicks outside expanded rows to close them
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Check if click is outside the users table container
+      const usersTableContainer = document.querySelector('.users-table-container')
+      const sectionCard = document.querySelector('.section-card')
+      
+      // Don't close if clicking inside the table or section card
+      if (usersTableContainer && usersTableContainer.contains(event.target)) {
+        return
+      }
+      
+      // Don't close if clicking on modals
+      if (event.target.closest('.modal-overlay') || event.target.closest('.modal-content')) {
+        return
+      }
+      
+      // Close all expanded rows if clicking outside
+      if (expandedUsers.size > 0) {
+        setExpandedUsers(new Set())
+        // Also close editing if open
+        if (editingUserId) {
+          setEditingUserId(null)
+          setEditingUserData(null)
+        }
+      }
+    }
+
+    if (expandedUsers.size > 0) {
+      // Use a small delay to avoid closing immediately when opening
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside)
+      }, 100)
+      
+      return () => {
+        clearTimeout(timeoutId)
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [expandedUsers, editingUserId])
 
   const fetchAllData = async () => {
     await Promise.all([
@@ -381,22 +429,16 @@ export default function AdminView() {
     }
   }
 
-  const resetPassword = async (email) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/auth',
-      })
-      if (error) throw error
-      setSuccess(`Password reset email sent to ${email}`)
-      setTimeout(() => setSuccess(''), 5000)
-    } catch (err) {
-      setError(err.message || 'Failed to send password reset email')
-      setTimeout(() => setError(''), 5000)
-    }
+
+  const handleDeleteClick = (userId, email, authUuid) => {
+    setUserToDelete({ userId, email, authUuid })
+    setShowDeleteConfirm(true)
   }
 
-  const deleteUser = async (userId, email, authUuid) => {
-    if (!confirm(`Are you sure you want to delete user ${email}?`)) return
+  const deleteUser = async () => {
+    if (!userToDelete) return
+    
+    const { userId, email, authUuid } = userToDelete
     
     try {
       setLoading(true)
@@ -432,6 +474,21 @@ export default function AdminView() {
         type: 'success'
       })
       
+      // Close confirmation modal
+      setShowDeleteConfirm(false)
+      setUserToDelete(null)
+      
+      // Remove from expanded if it was expanded
+      const newExpanded = new Set(expandedUsers)
+      newExpanded.delete(userId)
+      setExpandedUsers(newExpanded)
+      
+      // Clear editing if it was being edited
+      if (editingUserId === userId) {
+        setEditingUserId(null)
+        setEditingUserData(null)
+      }
+      
       await fetchUsers()
       await fetchStaff()
       await fetchPatients()
@@ -442,6 +499,134 @@ export default function AdminView() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const toggleUserExpand = (userId) => {
+    const newExpanded = new Set(expandedUsers)
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId)
+      // Also close editing if it was open
+      if (editingUserId === userId) {
+        setEditingUserId(null)
+        setEditingUserData(null)
+      }
+    } else {
+      newExpanded.add(userId)
+    }
+    setExpandedUsers(newExpanded)
+  }
+
+  const handleEditClick = (e, user) => {
+    e.stopPropagation()
+    const patient = patients.find(p => p.userId === user.userId)
+    const staffMember = staff.find(s => s.userId === user.userId)
+    
+    setEditingUserId(user.userId)
+    const editData = {
+      fname: user.fname || '',
+      lname: user.lname || '',
+      email: user.email || '',
+      role: user.role || '',
+    }
+    
+    if (user.role === 'PATIENT' && patient) {
+      editData.patientData = {
+        patientIc: patient.patientIc || '',
+        dateOfBirth: patient.dateOfBirth ? patient.dateOfBirth.split('T')[0] : '',
+        gender: patient.gender || 'Male',
+        emergencyContact: patient.emergencyContact || '',
+        emergencyContactPhone: patient.emergencyContactPhone || '',
+        medicalHistory: patient.medicalHistory || '',
+        allergies: patient.allergies || '',
+        bloodType: patient.bloodType || '',
+      }
+    }
+    
+    if (user.role === 'STAFF' && staffMember) {
+      editData.staffData = {
+        clinicId: staffMember.clinicId || null,
+      }
+    }
+    
+    setEditingUserData(editData)
+    // Ensure row is expanded
+    const newExpanded = new Set(expandedUsers)
+    newExpanded.add(user.userId)
+    setExpandedUsers(newExpanded)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingUserId || !editingUserData) return
+
+    try {
+      setLoading(true)
+      
+      // Update user in backend
+      await userAPI.update(editingUserId, {
+        fname: editingUserData.fname,
+        lname: editingUserData.lname,
+        email: editingUserData.email,
+      })
+
+      // If it's a patient, also update patient details
+      if (editingUserData.role === 'PATIENT' && editingUserData.patientData) {
+        await adminAPI.updatePatient(editingUserId, editingUserData.patientData)
+      }
+      
+      // If it's a staff, also update staff details
+      if (editingUserData.role === 'STAFF' && editingUserData.staffData) {
+        await adminAPI.updateStaff(editingUserId, editingUserData.staffData)
+      }
+
+      setToast({
+        message: 'User updated successfully',
+        type: 'success'
+      })
+
+      setEditingUserId(null)
+      setEditingUserData(null)
+      
+      await fetchUsers()
+      await fetchStaff()
+      await fetchPatients()
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to update user',
+        type: 'error'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    const currentEditingUserId = editingUserId
+    setEditingUserId(null)
+    setEditingUserData(null)
+    // Close the expanded row
+    if (currentEditingUserId) {
+      const newExpanded = new Set(expandedUsers)
+      newExpanded.delete(currentEditingUserId)
+      setExpandedUsers(newExpanded)
+    }
+  }
+
+  const handleResetPassword = async (email) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/auth',
+      })
+      if (error) throw error
+      setToast({
+        message: `Password reset email sent to ${email}`,
+        type: 'success'
+      })
+    } catch (err) {
+      setToast({
+        message: err.message || 'Failed to send password reset email',
+        type: 'error'
+      })
     }
   }
 
@@ -1684,9 +1869,6 @@ export default function AdminView() {
             <>
               <div className="page-header">
                 <h1>User Management</h1>
-                <button onClick={fetchUsers} className="btn btn-secondary">
-                  Refresh
-                </button>
               </div>
 
               <div className="section-card">
@@ -1698,7 +1880,7 @@ export default function AdminView() {
                       onChange={(e) => {
                         setRoleFilter(e.target.value)
                       }}
-                      className="select-input"
+                      className="select-input styled-filter"
                     >
                       <option value="">All Roles</option>
                       <option value="PATIENT">Patients</option>
@@ -1723,76 +1905,403 @@ export default function AdminView() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(roleFilter ? users.filter(u => u.role === roleFilter) : users).map((user) => (
-                          <tr key={user.userId}>
-                            <td>{user.userId}</td>
-                            <td>
-                              {user.fname} {user.lname}
-                            </td>
-                            <td>{user.email}</td>
-                            <td>
-                              <span className={`role-badge role-${user.role?.toLowerCase()}`}>
-                                {user.role || 'N/A'}
-                              </span>
-                            </td>
-                            <td>
-                              {user.createdAt
-                                ? new Date(user.createdAt).toLocaleDateString()
-                                : 'N/A'}
-                            </td>
-                            <td>
-                              <div className="action-buttons-small">
-                                <button
-                                  onClick={() => resetPassword(user.email)}
-                                  className="btn btn-secondary btn-sm"
-                                  title="Reset Password"
-                                >
-                                  🔑
-                                </button>
-                                <button
-                                  onClick={() => deleteUser(user.userId, user.email, user.authUuid)}
-                                  className="btn btn-danger btn-sm"
-                                  title="Delete User"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                        {(roleFilter ? users.filter(u => u.role === roleFilter) : users).map((user) => {
+                          const isExpanded = expandedUsers.has(user.userId)
+                          const isEditing = editingUserId === user.userId
+                          const patient = patients.find(p => p.userId === user.userId)
+                          const staffMember = staff.find(s => s.userId === user.userId)
+                          
+                          return (
+                            <React.Fragment key={user.userId}>
+                              <tr 
+                                className={`user-row ${isExpanded ? 'expanded' : ''}`}
+                                onClick={() => toggleUserExpand(user.userId)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <td>{user.userId}</td>
+                                <td>
+                                  {user.fname} {user.lname}
+                                </td>
+                                <td>{user.email}</td>
+                                <td>
+                                  <span className={`role-badge role-${user.role?.toLowerCase()}`}>
+                                    {user.role || 'N/A'}
+                                  </span>
+                                </td>
+                                <td>
+                                  {user.createdAt
+                                    ? new Date(user.createdAt).toLocaleDateString()
+                                    : 'N/A'}
+                                </td>
+                                <td onClick={(e) => e.stopPropagation()}>
+                                  <div className="action-buttons-small">
+                                    <button
+                                      onClick={(e) => handleEditClick(e, user)}
+                                      className="btn btn-edit btn-sm"
+                                      title="Edit User"
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteClick(user.userId, user.email, user.authUuid)
+                                      }}
+                                      className="btn btn-delete btn-sm"
+                                      title="Delete User"
+                                    >
+                                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="user-expanded-row">
+                                  <td colSpan="6" className="user-expanded-content">
+                                    {isEditing ? (
+                                      <div className="user-edit-form">
+                                        <h3>Edit User Details</h3>
+                                        
+                                        {/* Basic Information Section */}
+                                        <div className="form-section">
+                                          <h4>Basic Information</h4>
+                                          <div className="form-row">
+                                            <div className="form-group">
+                                              <label>First Name</label>
+                                              <input
+                                                type="text"
+                                                value={editingUserData?.fname || ''}
+                                                onChange={(e) => setEditingUserData({ ...editingUserData, fname: e.target.value })}
+                                                className="form-input"
+                                              />
+                                            </div>
+                                            <div className="form-group">
+                                              <label>Last Name</label>
+                                              <input
+                                                type="text"
+                                                value={editingUserData?.lname || ''}
+                                                onChange={(e) => setEditingUserData({ ...editingUserData, lname: e.target.value })}
+                                                className="form-input"
+                                              />
+                                            </div>
+                                          </div>
+                                          <div className="form-group">
+                                            <label>Email</label>
+                                            <input
+                                              type="email"
+                                              value={editingUserData?.email || ''}
+                                              onChange={(e) => setEditingUserData({ ...editingUserData, email: e.target.value })}
+                                              className="form-input"
+                                            />
+                                          </div>
+                                          {user.role === 'PATIENT' && patient && (
+                                            <div className="form-row">
+                                              <div className="form-group">
+                                                <label>Patient IC</label>
+                                                <input
+                                                  type="text"
+                                                  value={editingUserData?.patientData?.patientIc || patient.patientIc || ''}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, patientIc: e.target.value }
+                                                  })}
+                                                  className="form-input"
+                                                />
+                                              </div>
+                                              <div className="form-group">
+                                                <label>Date of Birth</label>
+                                                <input
+                                                  type="date"
+                                                  value={editingUserData?.patientData?.dateOfBirth || (patient.dateOfBirth ? patient.dateOfBirth.split('T')[0] : '') || ''}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, dateOfBirth: e.target.value }
+                                                  })}
+                                                  className="form-input"
+                                                />
+                                              </div>
+                                              <div className="form-group">
+                                                <label>Gender</label>
+                                                <select
+                                                  value={editingUserData?.patientData?.gender || patient.gender || 'Male'}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, gender: e.target.value }
+                                                  })}
+                                                  className="form-input"
+                                                >
+                                                  <option value="Male">Male</option>
+                                                  <option value="Female">Female</option>
+                                                  <option value="Other">Other</option>
+                                                </select>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {user.role === 'PATIENT' && patient && (
+                                          <>
+
+                                            {/* Emergency Contact Section */}
+                                            <div className="form-section">
+                                              <h4>Emergency Contact</h4>
+                                              <div className="form-row">
+                                                <div className="form-group">
+                                                  <label>Emergency Contact Name</label>
+                                                  <input
+                                                    type="text"
+                                                    value={editingUserData?.patientData?.emergencyContact || patient.emergencyContact || ''}
+                                                    onChange={(e) => setEditingUserData({ 
+                                                      ...editingUserData, 
+                                                      patientData: { ...editingUserData?.patientData, emergencyContact: e.target.value }
+                                                    })}
+                                                    className="form-input"
+                                                    placeholder="Contact name"
+                                                  />
+                                                </div>
+                                                <div className="form-group">
+                                                  <label>Emergency Contact Phone</label>
+                                                  <input
+                                                    type="tel"
+                                                    value={editingUserData?.patientData?.emergencyContactPhone || patient.emergencyContactPhone || ''}
+                                                    onChange={(e) => setEditingUserData({ 
+                                                      ...editingUserData, 
+                                                      patientData: { ...editingUserData?.patientData, emergencyContactPhone: e.target.value }
+                                                    })}
+                                                    className="form-input"
+                                                    placeholder="Phone number"
+                                                  />
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            {/* Medical Information Section */}
+                                            <div className="form-section">
+                                              <h4>Medical Information</h4>
+                                              <div className="form-group">
+                                                <label>Blood Type</label>
+                                                <select
+                                                  value={editingUserData?.patientData?.bloodType || patient.bloodType || ''}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, bloodType: e.target.value }
+                                                  })}
+                                                  className="form-input form-select-styled"
+                                                >
+                                                  <option value="">Select Blood Type</option>
+                                                  <option value="A+">A+</option>
+                                                  <option value="A-">A-</option>
+                                                  <option value="B+">B+</option>
+                                                  <option value="B-">B-</option>
+                                                  <option value="AB+">AB+</option>
+                                                  <option value="AB-">AB-</option>
+                                                  <option value="O+">O+</option>
+                                                  <option value="O-">O-</option>
+                                                </select>
+                                              </div>
+                                              <div className="form-group">
+                                                <label>Allergies</label>
+                                                <textarea
+                                                  value={editingUserData?.patientData?.allergies || patient.allergies || ''}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, allergies: e.target.value }
+                                                  })}
+                                                  className="form-input form-textarea"
+                                                  placeholder="List any allergies..."
+                                                  rows="3"
+                                                />
+                                              </div>
+                                              <div className="form-group">
+                                                <label>Medical History</label>
+                                                <textarea
+                                                  value={editingUserData?.patientData?.medicalHistory || patient.medicalHistory || ''}
+                                                  onChange={(e) => setEditingUserData({ 
+                                                    ...editingUserData, 
+                                                    patientData: { ...editingUserData?.patientData, medicalHistory: e.target.value }
+                                                  })}
+                                                  className="form-input form-textarea"
+                                                  placeholder="Enter medical history..."
+                                                  rows="4"
+                                                />
+                                              </div>
+                                            </div>
+                                          </>
+                                        )}
+                                        
+                                        {user.role === 'STAFF' && staffMember && (
+                                          <div className="form-section">
+                                            <h4>Staff Information</h4>
+                                            <div className="form-group">
+                                              <label>Assigned Clinic</label>
+                                              <select
+                                                value={editingUserData?.staffData?.clinicId || staffMember.clinicId || ''}
+                                                onChange={(e) => setEditingUserData({ 
+                                                  ...editingUserData, 
+                                                  staffData: { ...editingUserData?.staffData, clinicId: parseInt(e.target.value) }
+                                                })}
+                                                className="form-input"
+                                              >
+                                                {clinics.map(clinic => (
+                                                  <option key={clinic.id} value={clinic.id}>
+                                                    {clinic.name}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        <div className="form-actions">
+                                          <button onClick={handleResetPassword.bind(null, user.email)} className="btn btn-secondary">
+                                            Reset Password
+                                          </button>
+                                          <button onClick={handleSaveEdit} className="btn btn-primary">
+                                            Save Changes
+                                          </button>
+                                          <button onClick={handleCancelEdit} className="btn btn-secondary">
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="user-details-view">
+                                        <div className="user-details-section">
+                                          <h3>Account Information</h3>
+                                          <div className="detail-grid">
+                                            <div className="detail-item">
+                                              <span className="detail-label">Email:</span>
+                                              <span className="detail-value">{user.email}</span>
+                                            </div>
+                                            <div className="detail-item">
+                                              <span className="detail-label">Password:</span>
+                                              <span className="detail-value">••••••••</span>
+                                            </div>
+                                            <div className="detail-item">
+                                              <span className="detail-label">User ID:</span>
+                                              <span className="detail-value">{user.userId}</span>
+                                            </div>
+                                            <div className="detail-item">
+                                              <span className="detail-label">Created:</span>
+                                              <span className="detail-value">
+                                                {user.createdAt ? new Date(user.createdAt).toLocaleString() : 'N/A'}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {user.role === 'PATIENT' && patient && (
+                                          <div className="user-details-section">
+                                            <h3>Patient Details</h3>
+                                            <div className="detail-grid">
+                                              <div className="detail-item">
+                                                <span className="detail-label">Patient IC:</span>
+                                                <span className="detail-value">{patient.patientIc || 'N/A'}</span>
+                                              </div>
+                                              <div className="detail-item">
+                                                <span className="detail-label">Date of Birth:</span>
+                                                <span className="detail-value">
+                                                  {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString() : 'N/A'}
+                                                </span>
+                                              </div>
+                                              <div className="detail-item">
+                                                <span className="detail-label">Gender:</span>
+                                                <span className="detail-value">{patient.gender || 'N/A'}</span>
+                                              </div>
+                                              <div className="detail-item">
+                                                <span className="detail-label">Blood Type:</span>
+                                                <span className="detail-value">{patient.bloodType || 'N/A'}</span>
+                                              </div>
+                                              <div className="detail-item">
+                                                <span className="detail-label">Emergency Contact:</span>
+                                                <span className="detail-value">{patient.emergencyContact || 'N/A'}</span>
+                                              </div>
+                                              <div className="detail-item">
+                                                <span className="detail-label">Emergency Phone:</span>
+                                                <span className="detail-value">{patient.emergencyContactPhone || 'N/A'}</span>
+                                              </div>
+                                              {patient.medicalHistory && (
+                                                <div className="detail-item full-width">
+                                                  <span className="detail-label">Medical History:</span>
+                                                  <span className="detail-value">{patient.medicalHistory}</span>
+                                                </div>
+                                              )}
+                                              {patient.allergies && (
+                                                <div className="detail-item full-width">
+                                                  <span className="detail-label">Allergies:</span>
+                                                  <span className="detail-value">{patient.allergies}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {user.role === 'STAFF' && staffMember && (
+                                          <div className="user-details-section">
+                                            <h3>Staff Details</h3>
+                                            <div className="detail-grid">
+                                              <div className="detail-item">
+                                                <span className="detail-label">Assigned Clinic:</span>
+                                                <span className="detail-value">
+                                                  {staffMember.clinicName || (staffMember.clinicId ? `Clinic ID: ${staffMember.clinicId}` : 'N/A')}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                        {user.role === 'ADMIN' && (
+                                          <div className="user-details-section">
+                                            <h3>Admin Account</h3>
+                                            <p>This is an administrator account with full system access.</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </div>
 
-              <div className="section-card">
-                <div className="section-header">
-                  <h2>Staff & Admin Members ({staff.length})</h2>
-                  <button onClick={fetchStaff} className="btn btn-secondary">
-                    Refresh
-                  </button>
-                </div>
-                <div className="staff-grid">
-                  {staff.map((member) => (
-                    <div key={member.userId} className="staff-card">
-                      <div className="staff-header">
-                        <h3>
-                          {member.fname} {member.lname}
-                        </h3>
-                        <span className={`role-badge role-${member.role?.toLowerCase()}`}>
-                          {member.role}
-                        </span>
-                      </div>
-                      <div className="staff-details">
-                        <p><strong>Email:</strong> {member.email}</p>
-                        <p><strong>Clinic:</strong> {member.clinicName || `ID: ${member.clinicId}`}</p>
-                        <p><strong>User ID:</strong> {member.userId}</p>
+              {/* Delete Confirmation Modal */}
+              {showDeleteConfirm && userToDelete && (
+                <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+                  <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2>Confirm Deletion</h2>
+                      <button className="modal-close" onClick={() => setShowDeleteConfirm(false)}>×</button>
+                    </div>
+                    <div className="modal-body">
+                      <p className="confirm-message">
+                        Are you sure you want to delete user <strong>{userToDelete.email}</strong>?
+                      </p>
+                      <p className="confirm-warning">
+                        This action cannot be undone. The user will be permanently removed from the system.
+                      </p>
+                      <div className="modal-actions">
+                        <button onClick={() => setShowDeleteConfirm(false)} className="btn btn-secondary">
+                          Cancel
+                        </button>
+                        <button onClick={deleteUser} className="btn btn-danger">
+                          Delete User
+                        </button>
                       </div>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
 
