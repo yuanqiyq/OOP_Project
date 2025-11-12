@@ -20,17 +20,18 @@ async function apiCall(endpoint, options = {}) {
   try {
     const response = await fetch(url, config)
     
-    // Handle empty responses
-    if (response.status === 204 || response.status === 201) {
+    // Handle empty responses (204 No Content)
+    if (response.status === 204) {
       return null
     }
     
     const data = await response.json().catch(() => null)
     
     if (!response.ok) {
-      const errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`
+      const errorMessage = data?.message || data?.error || data?.errorMessage || `HTTP error! status: ${response.status}`
       const error = new Error(errorMessage)
       error.status = response.status
+      error.response = { data }
       throw error
     }
     

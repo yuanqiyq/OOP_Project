@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { queueAPI, appointmentAPI, clinicAPI, adminAPI, doctorAPI, reportAPI } from '../lib/api'
+import { supabase } from '../lib/supabase'
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
 import { useLocation } from 'react-router-dom'
 import './StaffView.css'
 
 export default function StaffView() {
-  const { userProfile } = useAuth()
+  const { userProfile, setIgnoreAuthChanges, setOriginalSession } = useAuth()
   const location = useLocation()
   const [clinicId, setClinicId] = useState(null)
   const [clinicName, setClinicName] = useState('')
@@ -87,6 +88,36 @@ export default function StaffView() {
   const [reportDate, setReportDate] = useState('')
   const [generatingReport, setGeneratingReport] = useState(false)
 
+  // Manual check-in modal state
+  const [showManualCheckInModal, setShowManualCheckInModal] = useState(false)
+  const [manualCheckInStep, setManualCheckInStep] = useState('search') // 'search' | 'existing' | 'new' | 'appointment'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState([])
+  const [hasSearched, setHasSearched] = useState(false)
+  const [selectedPatientForCheckIn, setSelectedPatientForCheckIn] = useState(null)
+  const [newPatientFormData, setNewPatientFormData] = useState({
+    email: '',
+    fname: '',
+    lname: '',
+    patientIc: '',
+    dateOfBirth: '',
+    gender: 'Male',
+    emergencyContact: '',
+    emergencyContactPhone: '',
+    medicalHistory: '',
+    allergies: '',
+    bloodType: '',
+  })
+  const [checkInAppointmentData, setCheckInAppointmentData] = useState({
+    doctorId: null,
+    date: '',
+    timeSlot: null,
+    priority: 1,
+  })
+  const [generatedPassword, setGeneratedPassword] = useState('')
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([])
+  const [checkInExistingAppointments, setCheckInExistingAppointments] = useState([])
+
   // Helper function to show toast notifications
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -103,6 +134,375 @@ export default function StaffView() {
         return 'Emergency'
       default:
         return `Priority ${priority}`
+    }
+  }
+
+  // Generate secure random password
+  const generatePassword = () => {
+    const length = 16
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
+    let password = ''
+    // Ensure at least one of each type
+    password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]
+    password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]
+    password += '0123456789'[Math.floor(Math.random() * 10)]
+    password += '!@#$%^&*'[Math.floor(Math.random() * 8)]
+    // Fill the rest randomly
+    for (let i = password.length; i < length; i++) {
+      password += charset[Math.floor(Math.random() * charset.length)]
+    }
+    // Shuffle the password
+    return password.split('').sort(() => Math.random() - 0.5).join('')
+  }
+
+  // Search for patient by name or IC
+  const searchPatient = async () => {
+    if (!searchQuery.trim()) {
+      showToast('Please enter a name or IC number', 'error')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setHasSearched(true)
+      const query = searchQuery.trim().toLowerCase()
+      
+      // Search in patients list by name or IC
+      const allPatients = await adminAPI.getPatients()
+      const found = allPatients.filter(p => {
+        const fullName = `${p.fname || ''} ${p.lname || ''}`.toLowerCase().trim()
+        const ic = p.patientIc?.toLowerCase() || ''
+        return fullName.includes(query) || ic.includes(query)
+      })
+      
+      setSearchResults(found)
+      // Don't auto-select, let user choose
+      setSelectedPatientForCheckIn(null)
+    } catch (err) {
+      console.error('Error searching patient:', err)
+      showToast(err.message || 'Failed to search patient', 'error')
+      setSearchResults([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Reset manual check-in modal
+  const resetManualCheckInModal = () => {
+    setShowManualCheckInModal(false)
+    setManualCheckInStep('search')
+    setSearchQuery('')
+    setSearchResults([])
+    setHasSearched(false)
+    setSelectedPatientForCheckIn(null)
+    setNewPatientFormData({
+      email: '',
+      fname: '',
+      lname: '',
+      patientIc: '',
+      dateOfBirth: '',
+      gender: 'Male',
+      emergencyContact: '',
+      emergencyContactPhone: '',
+      medicalHistory: '',
+      allergies: '',
+      bloodType: '',
+    })
+    setCheckInAppointmentData({
+      doctorId: null,
+      date: '',
+      timeSlot: null,
+      priority: 1,
+    })
+    setGeneratedPassword('')
+    setAvailableTimeSlots([])
+    setCheckInExistingAppointments([])
+  }
+
+  // Generate time slots for selected doctor and date
+  const generateCheckInTimeSlots = async () => {
+    if (!checkInAppointmentData.doctorId || !checkInAppointmentData.date || !clinicId) return
+
+    try {
+      const doctor = doctors.find(d => d.id === checkInAppointmentData.doctorId)
+      if (!doctor) return
+
+      const clinic = clinics.find(c => c.id === clinicId)
+      if (!clinic) return
+
+      const date = new Date(checkInAppointmentData.date)
+      const dayOfWeek = date.getDay()
+      const isSaturday = dayOfWeek === 6
+      const isSunday = dayOfWeek === 0
+      const isPublicHoliday = false
+
+      const intervalMinutes = clinic.apptIntervalMin || 15
+      let slots = []
+
+      let startTime, endTime, pmStartTime, pmEndTime
+
+      if (isPublicHoliday) {
+        startTime = clinic.phAmStart
+        endTime = clinic.phAmEnd
+        pmStartTime = clinic.phPmStart
+        pmEndTime = clinic.phPmEnd
+      } else if (isSaturday) {
+        startTime = clinic.satAmStart
+        endTime = clinic.satAmEnd
+        pmStartTime = clinic.satPmStart
+        pmEndTime = clinic.satPmEnd
+      } else if (isSunday) {
+        startTime = clinic.sunAmStart
+        endTime = clinic.sunAmEnd
+        pmStartTime = clinic.sunPmStart
+        pmEndTime = clinic.sunPmEnd
+      } else {
+        startTime = clinic.monFriAmStart
+        endTime = clinic.monFriAmEnd
+        pmStartTime = clinic.monFriPmStart
+        pmEndTime = clinic.monFriPmEnd
+      }
+
+      // Generate AM slots
+      if (startTime && endTime) {
+        const amSlots = generateSlotsForPeriod(startTime, endTime, intervalMinutes, date)
+        slots.push(...amSlots)
+      }
+
+      // Generate PM slots
+      if (pmStartTime && pmEndTime) {
+        const pmSlots = generateSlotsForPeriod(pmStartTime, pmEndTime, intervalMinutes, date)
+        slots.push(...pmSlots)
+      }
+
+      // Fetch existing appointments for the date
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const clinicAppointments = await appointmentAPI.getByClinicId(clinicId)
+      const dayAppointments = clinicAppointments.filter(apt => {
+        const aptDate = new Date(apt.dateTime)
+        return aptDate >= startOfDay && aptDate <= endOfDay
+      })
+
+      setCheckInExistingAppointments(dayAppointments)
+      setAvailableTimeSlots(slots)
+    } catch (err) {
+      console.error('Error generating time slots:', err)
+      showToast('Failed to generate time slots', 'error')
+    }
+  }
+
+  // Get appointment count for a slot
+  const getCheckInAppointmentCountForSlot = (slotDatetime) => {
+    if (!checkInAppointmentData.doctorId || !clinicId) return 0
+    
+    return checkInExistingAppointments.filter(apt => {
+      const aptDate = new Date(apt.dateTime)
+      const slotDate = new Date(slotDatetime)
+      const status = apt.apptStatus?.toUpperCase() || ''
+      
+      return apt.doctorId === checkInAppointmentData.doctorId &&
+             apt.clinicId === clinicId &&
+             aptDate.getHours() === slotDate.getHours() && 
+             aptDate.getMinutes() === slotDate.getMinutes() &&
+             status === 'SCHEDULED'
+    }).length
+  }
+
+  // Check if slot is available
+  const isCheckInSlotAvailable = (slot) => {
+    const count = getCheckInAppointmentCountForSlot(slot.datetime)
+    return count < 3
+  }
+
+  // Create patient account and check in
+  const handleManualCheckIn = async () => {
+    if (!selectedPatientForCheckIn && manualCheckInStep !== 'appointment') {
+      showToast('Please select or create a patient', 'error')
+      return
+    }
+
+    if (!checkInAppointmentData.doctorId || !checkInAppointmentData.date || !checkInAppointmentData.timeSlot) {
+      showToast('Please select date and time slot', 'error')
+      return
+    }
+
+    try {
+      setLoading(true)
+      let patientId = null
+      let password = ''
+
+      // If new patient (appointment step without selectedPatientForCheckIn), create account
+      if (manualCheckInStep === 'appointment' && !selectedPatientForCheckIn) {
+        // Validate required fields
+        if (!newPatientFormData.email || !newPatientFormData.fname || !newPatientFormData.lname || 
+            !newPatientFormData.patientIc || !newPatientFormData.dateOfBirth || !newPatientFormData.gender) {
+          showToast('Please fill in all required fields', 'error')
+          setLoading(false)
+          return
+        }
+
+        // Generate password
+        password = generatePassword()
+        setGeneratedPassword(password)
+
+        // Get current session to restore it after creating the new user
+        const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError || !currentSession) {
+          throw new Error('No active session. Please sign in again.')
+        }
+
+        // Set flag to ignore auth state changes during user creation
+        setOriginalSession(currentSession)
+        setIgnoreAuthChanges(true)
+
+        // Create Supabase Auth account
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: newPatientFormData.email,
+          password: password,
+          options: {
+            emailRedirectTo: window.location.origin + '/auth',
+          },
+        })
+
+        if (authError) throw authError
+        if (!authData.user) throw new Error('Failed to create user in Supabase Auth')
+
+        // Immediately send password reset email
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(newPatientFormData.email, {
+          redirectTo: window.location.origin + '/auth',
+        })
+        if (resetError) {
+          console.warn('Failed to send password reset email:', resetError)
+          // Don't throw, just warn
+        }
+
+        // Immediately restore the original staff session
+        await supabase.auth.setSession({
+          access_token: currentSession.access_token,
+          refresh_token: currentSession.refresh_token,
+        })
+
+        // Small delay to ensure session is restored before proceeding
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        // Create patient record
+        const createdPatient = await adminAPI.createPatient({
+          authUuid: authData.user.id,
+          email: newPatientFormData.email,
+          fname: newPatientFormData.fname,
+          lname: newPatientFormData.lname,
+          role: 'PATIENT',
+          patientIc: newPatientFormData.patientIc,
+          dateOfBirth: newPatientFormData.dateOfBirth,
+          gender: newPatientFormData.gender,
+          emergencyContact: newPatientFormData.emergencyContact || null,
+          emergencyContactPhone: newPatientFormData.emergencyContactPhone || null,
+          medicalHistory: newPatientFormData.medicalHistory || null,
+          allergies: newPatientFormData.allergies || null,
+          bloodType: newPatientFormData.bloodType || null,
+        })
+
+        // Patient extends User, so it has userId. patientId is the same as userId for Patient entities
+        patientId = createdPatient.userId || createdPatient.patientId || createdPatient.id
+        console.log('Created patient object:', createdPatient)
+        console.log('Extracted patientId:', patientId)
+        if (!patientId) {
+          console.error('Failed to extract patientId. Created patient object:', JSON.stringify(createdPatient, null, 2))
+          throw new Error('Failed to get patient ID after account creation')
+        }
+        setIgnoreAuthChanges(false)
+      } else {
+        // For existing patients, try userId first (since Patient extends User)
+        patientId = selectedPatientForCheckIn.userId || selectedPatientForCheckIn.patientId || selectedPatientForCheckIn.id
+        console.log('Selected patient object:', selectedPatientForCheckIn)
+        console.log('Extracted patientId:', patientId)
+        if (!patientId) {
+          console.error('Failed to extract patientId. Selected patient object:', JSON.stringify(selectedPatientForCheckIn, null, 2))
+          throw new Error('Patient ID not found')
+        }
+      }
+
+      // Validate all required data before creating appointment
+      if (!patientId || !clinicId || !checkInAppointmentData.doctorId || !checkInAppointmentData.timeSlot) {
+        console.error('Missing required information:', {
+          patientId,
+          clinicId,
+          doctorId: checkInAppointmentData.doctorId,
+          timeSlot: checkInAppointmentData.timeSlot
+        })
+        throw new Error('Missing required information: patientId, clinicId, doctorId, or timeSlot')
+      }
+
+      // Create appointment
+      const appointmentDateTime = new Date(checkInAppointmentData.timeSlot.datetime)
+      const year = appointmentDateTime.getFullYear()
+      const month = String(appointmentDateTime.getMonth() + 1).padStart(2, '0')
+      const day = String(appointmentDateTime.getDate()).padStart(2, '0')
+      const hours = String(appointmentDateTime.getHours()).padStart(2, '0')
+      const minutes = String(appointmentDateTime.getMinutes()).padStart(2, '0')
+      const seconds = String(appointmentDateTime.getSeconds()).padStart(2, '0')
+      const localDateTimeString = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`
+
+      console.log('Creating appointment with:', {
+        patientId,
+        clinicId,
+        doctorId: checkInAppointmentData.doctorId,
+        dateTime: localDateTimeString
+      })
+
+      const newAppointment = await appointmentAPI.create({
+        patientId: Number(patientId), // Ensure it's a number
+        clinicId: Number(clinicId), // Ensure it's a number
+        doctorId: Number(checkInAppointmentData.doctorId), // Ensure it's a number
+        dateTime: localDateTimeString,
+        apptStatus: 'SCHEDULED'
+      })
+
+      console.log('Appointment created:', newAppointment)
+
+      if (!newAppointment || !newAppointment.appointmentId) {
+        throw new Error('Failed to create appointment or get appointment ID')
+      }
+
+      // Check into queue
+      const appointmentId = newAppointment.appointmentId || newAppointment.id
+      console.log('Checking into queue with:', {
+        appointmentId: appointmentId,
+        priority: checkInAppointmentData.priority,
+        fullAppointmentObject: newAppointment
+      })
+
+      if (!appointmentId) {
+        console.error('Failed to get appointmentId from created appointment:', newAppointment)
+        throw new Error('Failed to get appointment ID after creating appointment')
+      }
+
+      await queueAPI.checkIn(Number(appointmentId), checkInAppointmentData.priority)
+
+      // Show success message
+      if (password) {
+        showToast(`Patient checked in successfully! Generated password: ${password} (Password reset email sent)`, 'success')
+      } else {
+        showToast('Patient checked in successfully!', 'success')
+      }
+
+      // Refresh queue and appointments
+      await fetchQueue()
+      await fetchAppointments()
+
+      // Close modal
+      resetManualCheckInModal()
+    } catch (err) {
+      console.error('Error during manual check-in:', err)
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to check in patient'
+      showToast(errorMessage, 'error')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -137,6 +537,9 @@ export default function StaffView() {
           setSelectedPatientDetails(null)
           setPatientAppointmentsHistory([])
         }
+        if (showManualCheckInModal) {
+          resetManualCheckInModal()
+        }
         if (showTreatmentSummaryModal) {
           setShowTreatmentSummaryModal(false)
           setSelectedAppointmentForSummary(null)
@@ -157,7 +560,7 @@ export default function StaffView() {
 
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [showTreatmentModal, showPriorityModal, showRequeuePriorityModal, showCancelConfirmationModal, showMedicalHistoryModal, showTreatmentSummaryModal, showAddDoctorModal, showEditDoctorModal, showBookingModal])
+  }, [showTreatmentModal, showPriorityModal, showRequeuePriorityModal, showCancelConfirmationModal, showMedicalHistoryModal, showTreatmentSummaryModal, showAddDoctorModal, showEditDoctorModal, showBookingModal, showManualCheckInModal])
 
   useEffect(() => {
     if (userProfile?.email) {
@@ -177,6 +580,28 @@ export default function StaffView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinicId])
+
+  // Auto-select doctor when date is selected for manual check-in
+  useEffect(() => {
+    if (checkInAppointmentData.date && clinicId && showManualCheckInModal && manualCheckInStep !== 'search') {
+      const availableDoctors = getDoctorsForDate(checkInAppointmentData.date, clinicId)
+      if (availableDoctors.length > 0 && !checkInAppointmentData.doctorId) {
+        setCheckInAppointmentData({ ...checkInAppointmentData, doctorId: availableDoctors[0].id, timeSlot: null })
+      } else if (availableDoctors.length === 0) {
+        // No doctor available on this date
+        setCheckInAppointmentData({ ...checkInAppointmentData, doctorId: null, timeSlot: null })
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkInAppointmentData.date, clinicId, showManualCheckInModal, manualCheckInStep])
+
+  // Generate time slots for manual check-in when doctor or date changes
+  useEffect(() => {
+    if (checkInAppointmentData.doctorId && checkInAppointmentData.date && clinicId && showManualCheckInModal) {
+      generateCheckInTimeSlots()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkInAppointmentData.doctorId, checkInAppointmentData.date, clinicId, showManualCheckInModal])
 
   // Auto-populate doctor when date is selected (only if no doctor selected or current doctor doesn't work that day)
   useEffect(() => {
@@ -1271,11 +1696,18 @@ export default function StaffView() {
             <>
               <div className="page-header">
                 <div>
-                  <h1>Queue Management</h1>
+                  <h1>Queue</h1>
                   <p className="subtitle">
                     {clinicName || `Clinic ID: ${clinicId}`}
                   </p>
                 </div>
+                <button
+                  onClick={() => setShowManualCheckInModal(true)}
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  Manual Check-in
+                </button>
               </div>
 
               {/* Currently Serving */}
@@ -2908,6 +3340,824 @@ export default function StaffView() {
               </div>
             )
           })()}
+
+          {/* Manual Check-in Modal */}
+          {showManualCheckInModal && (
+            <div className="modal-overlay" onClick={() => {
+              if (!loading) {
+                resetManualCheckInModal()
+              }
+            }}>
+              <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div>
+                    <h2>Manual Check-in</h2>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!loading) {
+                        resetManualCheckInModal()
+                      }
+                    }}
+                    className="modal-close"
+                    disabled={loading}
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="modal-body">
+                  {loading ? (
+                    <div className="loading" style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      padding: '3rem',
+                      gap: '1rem'
+                    }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        border: '4px solid rgba(78, 205, 196, 0.2)',
+                        borderTop: '4px solid var(--teal-primary)',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }}></div>
+                      <p style={{ margin: 0, color: 'var(--teal-dark)', fontWeight: '500' }}>
+                        {manualCheckInStep === 'appointment' && !selectedPatientForCheckIn 
+                          ? 'Creating account and checking in...' 
+                          : 'Processing check-in...'}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Step 1: Search Patient */}
+                      {manualCheckInStep === 'search' && (
+                        <div>
+                          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                            <div style={{ 
+                              width: '64px', 
+                              height: '64px', 
+                              borderRadius: '50%', 
+                              background: 'var(--gradient-primary)', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              margin: '0 auto 1rem',
+                              fontSize: '2rem'
+                            }}>
+                              🔍
+                            </div>
+                            <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--teal-dark)' }}>Search for Patient</h3>
+                            <p style={{ color: '#666', marginBottom: 0 }}>
+                              Enter patient name or IC number to search
+                            </p>
+                          </div>
+                          <div style={{ 
+                            display: 'flex', 
+                            gap: '0.75rem', 
+                            marginBottom: '1.5rem',
+                            background: '#f8f9fa',
+                            padding: '1rem',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(78, 205, 196, 0.2)'
+                          }}>
+                            <input
+                              type="text"
+                              placeholder="Name or IC Number"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  searchPatient()
+                                }
+                              }}
+                              className="input"
+                              style={{ 
+                                flex: 1,
+                                fontSize: '1rem',
+                                padding: '0.875rem 1rem',
+                                border: '2px solid rgba(78, 205, 196, 0.3)',
+                                borderRadius: '8px',
+                                transition: 'all 0.3s'
+                              }}
+                              disabled={loading}
+                            />
+                            <button
+                              onClick={searchPatient}
+                              className="btn btn-primary"
+                              disabled={loading || !searchQuery.trim()}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem',
+                                fontWeight: '600',
+                                minWidth: '120px'
+                              }}
+                            >
+                              {loading ? 'Searching...' : 'Search'}
+                            </button>
+                          </div>
+                          {searchResults.length > 0 && (
+                            <div style={{ marginTop: '1.5rem' }}>
+                              <h4 style={{ marginBottom: '1rem', color: 'var(--teal-dark)' }}>
+                                Search Results ({searchResults.length})
+                              </h4>
+                              <div style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '0.75rem',
+                                maxHeight: '300px',
+                                overflowY: 'auto',
+                                paddingRight: '0.5rem'
+                              }}>
+                                {searchResults.map((patient) => (
+                                  <div
+                                    key={patient.patientId || patient.id}
+                                    onClick={() => {
+                                      setSelectedPatientForCheckIn(patient)
+                                      setManualCheckInStep('existing')
+                                    }}
+                                    style={{
+                                      padding: '1.25rem',
+                                      border: '2px solid',
+                                      borderColor: selectedPatientForCheckIn?.patientId === patient.patientId 
+                                        ? 'var(--teal-primary)' 
+                                        : 'rgba(78, 205, 196, 0.2)',
+                                      borderRadius: '12px',
+                                      cursor: 'pointer',
+                                      background: selectedPatientForCheckIn?.patientId === patient.patientId 
+                                        ? 'var(--gradient-glow)' 
+                                        : '#fff',
+                                      transition: 'all 0.3s',
+                                      boxShadow: selectedPatientForCheckIn?.patientId === patient.patientId
+                                        ? '0 4px 12px rgba(78, 205, 196, 0.2)'
+                                        : '0 2px 4px rgba(0, 0, 0, 0.05)'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (selectedPatientForCheckIn?.patientId !== patient.patientId) {
+                                        e.currentTarget.style.borderColor = 'var(--teal-primary)'
+                                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(78, 205, 196, 0.15)'
+                                      }
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (selectedPatientForCheckIn?.patientId !== patient.patientId) {
+                                        e.currentTarget.style.borderColor = 'rgba(78, 205, 196, 0.2)'
+                                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)'
+                                      }
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                      <div style={{
+                                        width: '48px',
+                                        height: '48px',
+                                        borderRadius: '50%',
+                                        background: 'var(--gradient-primary)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#fff',
+                                        fontWeight: '700',
+                                        fontSize: '1.25rem',
+                                        flexShrink: 0
+                                      }}>
+                                        {patient.fname?.[0]?.toUpperCase() || 'P'}
+                                      </div>
+                                      <div style={{ flex: 1 }}>
+                                        <div style={{ 
+                                          fontWeight: '600', 
+                                          fontSize: '1.1rem',
+                                          color: 'var(--teal-dark)',
+                                          marginBottom: '0.25rem'
+                                        }}>
+                                          {patient.fname} {patient.lname}
+                                        </div>
+                                        <div style={{ 
+                                          display: 'flex', 
+                                          gap: '1rem', 
+                                          flexWrap: 'wrap',
+                                          fontSize: '0.9rem',
+                                          color: '#666'
+                                        }}>
+                                          <span>📧 {patient.email}</span>
+                                          <span>🆔 IC: {patient.patientIc}</span>
+                                        </div>
+                                      </div>
+                                      <div style={{
+                                        color: 'var(--teal-primary)',
+                                        fontSize: '1.5rem',
+                                        opacity: selectedPatientForCheckIn?.patientId === patient.patientId ? 1 : 0.3
+                                      }}>
+                                        →
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {hasSearched && searchResults.length === 0 && !loading && (
+                            <div style={{
+                              textAlign: 'center',
+                              padding: '2rem',
+                              color: '#666',
+                              background: '#f8f9fa',
+                              borderRadius: '12px',
+                              border: '1px dashed rgba(78, 205, 196, 0.3)'
+                            }}>
+                              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>👤</div>
+                              <p style={{ margin: 0, fontWeight: '500' }}>No patient found</p>
+                              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>You can create a new account below</p>
+                            </div>
+                          )}
+                          <div style={{ 
+                            marginTop: '2rem', 
+                            paddingTop: '1.5rem', 
+                            borderTop: '2px solid rgba(78, 205, 196, 0.2)',
+                            textAlign: 'center'
+                          }}>
+                            <p style={{ color: '#666', marginBottom: '1rem', fontSize: '0.95rem' }}>
+                              Can't find the patient?
+                            </p>
+                            <button
+                              onClick={() => setManualCheckInStep('new')}
+                              className="btn btn-secondary"
+                              disabled={loading}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem',
+                                fontWeight: '600'
+                              }}
+                            >
+                              ➕ Create New Patient Account
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 2: Existing Patient - Appointment Details */}
+                      {manualCheckInStep === 'existing' && selectedPatientForCheckIn && (
+                        <div>
+                          <div style={{ 
+                            background: 'var(--gradient-glow)', 
+                            padding: '1.5rem', 
+                            borderRadius: '12px', 
+                            marginBottom: '2rem',
+                            border: '1px solid rgba(78, 205, 196, 0.2)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                              <h3 style={{ margin: 0, color: 'var(--teal-dark)' }}>Patient Information</h3>
+                              <button
+                                onClick={() => {
+                                  setManualCheckInStep('search')
+                                  setSelectedPatientForCheckIn(null)
+                                  setCheckInAppointmentData({
+                                    doctorId: null,
+                                    date: '',
+                                    timeSlot: null,
+                                    priority: 1,
+                                  })
+                                }}
+                                className="btn btn-outline"
+                                style={{ 
+                                  padding: '0.5rem 1rem',
+                                  fontSize: '0.875rem'
+                                }}
+                              >
+                                Change Patient
+                              </button>
+                            </div>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '1rem',
+                              marginTop: '1rem'
+                            }}>
+                              <div style={{
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '50%',
+                                background: 'var(--gradient-primary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontWeight: '700',
+                                fontSize: '1.25rem',
+                                flexShrink: 0
+                              }}>
+                                {selectedPatientForCheckIn.fname?.[0]?.toUpperCase() || 'P'}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ 
+                                  fontWeight: '600', 
+                                  fontSize: '1.1rem',
+                                  color: 'var(--teal-dark)',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  {selectedPatientForCheckIn.fname} {selectedPatientForCheckIn.lname}
+                                </div>
+                                <div style={{ 
+                                  display: 'flex', 
+                                  gap: '1rem', 
+                                  flexWrap: 'wrap',
+                                  fontSize: '0.9rem',
+                                  color: '#666'
+                                }}>
+                                  <span>📧 {selectedPatientForCheckIn.email}</span>
+                                  <span>🆔 IC: {selectedPatientForCheckIn.patientIc}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="booking-form-section" style={{ marginTop: 0 }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--teal-dark)' }}>Appointment Details</h3>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Date *</label>
+                                <input
+                                  type="date"
+                                  value={checkInAppointmentData.date}
+                                  onChange={(e) => {
+                                    setCheckInAppointmentData({ ...checkInAppointmentData, date: e.target.value, timeSlot: null })
+                                  }}
+                                  className="input"
+                                  min={new Date().toISOString().split('T')[0]}
+                                  disabled={loading}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
+                                />
+                              </div>
+
+                              {checkInAppointmentData.date && checkInAppointmentData.doctorId && (
+                                <>
+                                  {(() => {
+                                    const doctor = doctors.find(d => d.id === checkInAppointmentData.doctorId)
+                                    return doctor && (
+                                      <div style={{
+                                        background: 'var(--gradient-glow)',
+                                        padding: '1rem',
+                                        borderRadius: '12px',
+                                        border: '1px solid rgba(78, 205, 196, 0.2)'
+                                      }}>
+                                        <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.25rem' }}>Doctor on shift</div>
+                                        <div style={{ fontWeight: '600', color: 'var(--teal-dark)', fontSize: '1.1rem' }}>
+                                          Dr. {doctor.fname} {doctor.lname}
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+
+                                  {availableTimeSlots.length > 0 ? (
+                                    <div>
+                                      <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Select Time Slot *</label>
+                                      <div className="time-slots-grid">
+                                        {availableTimeSlots.map((slot, idx) => {
+                                          const isAvailable = isCheckInSlotAvailable(slot)
+                                          const count = getCheckInAppointmentCountForSlot(slot.datetime)
+                                          const isSelected = checkInAppointmentData.timeSlot?.datetime?.getTime() === slot.datetime.getTime()
+                                          return (
+                                            <button
+                                              key={idx}
+                                              type="button"
+                                              className={`time-slot ${!isAvailable ? 'unavailable' : ''} ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => {
+                                                if (isAvailable) {
+                                                  setCheckInAppointmentData({ ...checkInAppointmentData, timeSlot: slot })
+                                                }
+                                              }}
+                                              disabled={!isAvailable || loading}
+                                              title={!isAvailable ? `Slot full (${count}/3 appointments)` : 'Click to select'}
+                                            >
+                                              <span className="time-slot-time">{slot.timeString}</span>
+                                              {!isAvailable && (
+                                                <span className="time-slot-badge">Full</span>
+                                              )}
+                                              {count > 0 && isAvailable && (
+                                                <div className="time-slot-count-badge">
+                                                  <span className="time-slot-count-number">{count}</span>
+                                                  <span className="time-slot-count-separator">/</span>
+                                                  <span className="time-slot-count-total">3</span>
+                                                </div>
+                                              )}
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  ) : checkInAppointmentData.date && (
+                                    <div className="empty-state">
+                                      <p>No time slots available for this date. The clinic may be closed or opening hours are not set.</p>
+                                    </div>
+                                  )}
+
+                                  <div>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Priority *</label>
+                                    <select
+                                      value={checkInAppointmentData.priority}
+                                      onChange={(e) => {
+                                        setCheckInAppointmentData({ ...checkInAppointmentData, priority: parseInt(e.target.value) })
+                                      }}
+                                      className="input"
+                                      disabled={loading}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.875rem 1rem',
+                                        fontSize: '1rem'
+                                      }}
+                                    >
+                                      <option value={1}>Normal</option>
+                                      <option value={2}>Elderly</option>
+                                      <option value={3}>Emergency</option>
+                                    </select>
+                                  </div>
+                                </>
+                              )}
+
+                              {checkInAppointmentData.date && !checkInAppointmentData.doctorId && (
+                                <div className="empty-state">
+                                  <p>No doctor available on this date. Please select a different date.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid rgba(78, 205, 196, 0.2)' }}>
+                            <button
+                              onClick={handleManualCheckIn}
+                              className="btn btn-primary"
+                              disabled={loading || !checkInAppointmentData.doctorId || !checkInAppointmentData.date || !checkInAppointmentData.timeSlot}
+                              style={{
+                                flex: 1,
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem',
+                                fontWeight: '600'
+                              }}
+                            >
+                              Check In
+                            </button>
+                            <button
+                              onClick={resetManualCheckInModal}
+                              className="btn btn-outline"
+                              disabled={loading}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 3: New Patient - Account Creation */}
+                      {manualCheckInStep === 'new' && (
+                        <div>
+                          <h3 style={{ marginTop: 0 }}>Create New Patient Account</h3>
+                          <button
+                            onClick={() => {
+                              setManualCheckInStep('search')
+                              setNewPatientFormData({
+                                email: '',
+                                fname: '',
+                                lname: '',
+                                patientIc: '',
+                                dateOfBirth: '',
+                                gender: 'Male',
+                                emergencyContact: '',
+                                emergencyContactPhone: '',
+                                medicalHistory: '',
+                                allergies: '',
+                                bloodType: '',
+                              })
+                            }}
+                            className="btn btn-outline"
+                            style={{ marginBottom: '1.5rem' }}
+                          >
+                            ← Back to Search
+                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label>First Name *</label>
+                                <input
+                                  type="text"
+                                  value={newPatientFormData.fname}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, fname: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                />
+                              </div>
+                              <div>
+                                <label>Last Name *</label>
+                                <input
+                                  type="text"
+                                  value={newPatientFormData.lname}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, lname: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label>Email *</label>
+                              <input
+                                type="email"
+                                value={newPatientFormData.email}
+                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, email: e.target.value })}
+                                className="input"
+                                disabled={loading}
+                              />
+                            </div>
+                            <div>
+                              <label>IC Number *</label>
+                              <input
+                                type="text"
+                                value={newPatientFormData.patientIc}
+                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, patientIc: e.target.value })}
+                                className="input"
+                                disabled={loading}
+                              />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label>Date of Birth *</label>
+                                <input
+                                  type="date"
+                                  value={newPatientFormData.dateOfBirth}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, dateOfBirth: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                />
+                              </div>
+                              <div>
+                                <label>Gender *</label>
+                                <select
+                                  value={newPatientFormData.gender}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, gender: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                >
+                                  <option value="Male">Male</option>
+                                  <option value="Female">Female</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label>Emergency Contact</label>
+                                <input
+                                  type="text"
+                                  value={newPatientFormData.emergencyContact}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, emergencyContact: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                />
+                              </div>
+                              <div>
+                                <label>Emergency Phone</label>
+                                <input
+                                  type="tel"
+                                  value={newPatientFormData.emergencyContactPhone}
+                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, emergencyContactPhone: e.target.value })}
+                                  className="input"
+                                  disabled={loading}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label>Blood Type</label>
+                              <select
+                                value={newPatientFormData.bloodType}
+                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, bloodType: e.target.value })}
+                                className="input"
+                                disabled={loading}
+                              >
+                                <option value="">Select Blood Type</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label>Allergies</label>
+                              <textarea
+                                value={newPatientFormData.allergies}
+                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, allergies: e.target.value })}
+                                className="input"
+                                rows={3}
+                                disabled={loading}
+                                placeholder="List any allergies..."
+                              />
+                            </div>
+                            <div>
+                              <label>Medical History</label>
+                              <textarea
+                                value={newPatientFormData.medicalHistory}
+                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, medicalHistory: e.target.value })}
+                                className="input"
+                                rows={3}
+                                disabled={loading}
+                                placeholder="Previous medical conditions, surgeries, etc..."
+                              />
+                            </div>
+                          </div>
+                          <div style={{ marginTop: '1.5rem' }}>
+                            <button
+                              onClick={() => {
+                                setManualCheckInStep('appointment')
+                                setSelectedPatientForCheckIn(null) // Mark as new patient
+                              }}
+                              className="btn btn-primary"
+                              disabled={loading || !newPatientFormData.email || !newPatientFormData.fname || !newPatientFormData.lname || !newPatientFormData.patientIc || !newPatientFormData.dateOfBirth || !newPatientFormData.gender}
+                            >
+                              Continue to Appointment
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 4: Appointment Details for New Patient */}
+                      {manualCheckInStep === 'appointment' && (
+                        <div>
+                          <button
+                            onClick={() => setManualCheckInStep('new')}
+                            className="btn btn-outline"
+                            disabled={loading}
+                            style={{ marginBottom: '1.5rem' }}
+                          >
+                            ← Back to Patient Info
+                          </button>
+                          <div className="booking-form-section" style={{ marginTop: 0 }}>
+                            <h3 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--teal-dark)' }}>Appointment Details</h3>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Date *</label>
+                                <input
+                                  type="date"
+                                  value={checkInAppointmentData.date}
+                                  onChange={(e) => {
+                                    setCheckInAppointmentData({ ...checkInAppointmentData, date: e.target.value, timeSlot: null })
+                                  }}
+                                  className="input"
+                                  min={new Date().toISOString().split('T')[0]}
+                                  disabled={loading}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
+                                />
+                              </div>
+
+                              {checkInAppointmentData.date && checkInAppointmentData.doctorId && (
+                                <>
+                                  {(() => {
+                                    const doctor = doctors.find(d => d.id === checkInAppointmentData.doctorId)
+                                    return doctor && (
+                                      <div style={{
+                                        background: 'var(--gradient-glow)',
+                                        padding: '1rem',
+                                        borderRadius: '12px',
+                                        border: '1px solid rgba(78, 205, 196, 0.2)'
+                                      }}>
+                                        <div style={{ fontSize: '0.875rem', color: '#666', marginBottom: '0.25rem' }}>Doctor on shift</div>
+                                        <div style={{ fontWeight: '600', color: 'var(--teal-dark)', fontSize: '1.1rem' }}>
+                                          Dr. {doctor.fname} {doctor.lname}
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+
+                                  {availableTimeSlots.length > 0 ? (
+                                    <div>
+                                      <label style={{ display: 'block', marginBottom: '0.75rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Select Time Slot *</label>
+                                      <div className="time-slots-grid">
+                                        {availableTimeSlots.map((slot, idx) => {
+                                          const isAvailable = isCheckInSlotAvailable(slot)
+                                          const count = getCheckInAppointmentCountForSlot(slot.datetime)
+                                          const isSelected = checkInAppointmentData.timeSlot?.datetime?.getTime() === slot.datetime.getTime()
+                                          return (
+                                            <button
+                                              key={idx}
+                                              type="button"
+                                              className={`time-slot ${!isAvailable ? 'unavailable' : ''} ${isSelected ? 'selected' : ''}`}
+                                              onClick={() => {
+                                                if (isAvailable) {
+                                                  setCheckInAppointmentData({ ...checkInAppointmentData, timeSlot: slot })
+                                                }
+                                              }}
+                                              disabled={!isAvailable || loading}
+                                              title={!isAvailable ? `Slot full (${count}/3 appointments)` : 'Click to select'}
+                                            >
+                                              <span className="time-slot-time">{slot.timeString}</span>
+                                              {!isAvailable && (
+                                                <span className="time-slot-badge">Full</span>
+                                              )}
+                                              {count > 0 && isAvailable && (
+                                                <div className="time-slot-count-badge">
+                                                  <span className="time-slot-count-number">{count}</span>
+                                                  <span className="time-slot-count-separator">/</span>
+                                                  <span className="time-slot-count-total">3</span>
+                                                </div>
+                                              )}
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  ) : checkInAppointmentData.date && (
+                                    <div className="empty-state">
+                                      <p>No time slots available for this date. The clinic may be closed or opening hours are not set.</p>
+                                    </div>
+                                  )}
+
+                                  <div>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Priority *</label>
+                                    <select
+                                      value={checkInAppointmentData.priority}
+                                      onChange={(e) => {
+                                        setCheckInAppointmentData({ ...checkInAppointmentData, priority: parseInt(e.target.value) })
+                                      }}
+                                      className="input"
+                                      disabled={loading}
+                                      style={{
+                                        width: '100%',
+                                        padding: '0.875rem 1rem',
+                                        fontSize: '1rem'
+                                      }}
+                                    >
+                                      <option value={1}>Normal</option>
+                                      <option value={2}>Elderly</option>
+                                      <option value={3}>Emergency</option>
+                                    </select>
+                                  </div>
+                                </>
+                              )}
+
+                              {checkInAppointmentData.date && !checkInAppointmentData.doctorId && (
+                                <div className="empty-state">
+                                  <p>No doctor available on this date. Please select a different date.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid rgba(78, 205, 196, 0.2)' }}>
+                            <button
+                              onClick={() => setManualCheckInStep('new')}
+                              className="btn btn-outline"
+                              disabled={loading}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              ← Back
+                            </button>
+                            <button
+                              onClick={handleManualCheckIn}
+                              className="btn btn-primary"
+                              disabled={loading || !checkInAppointmentData.doctorId || !checkInAppointmentData.date || !checkInAppointmentData.timeSlot}
+                              style={{
+                                flex: 1,
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem',
+                                fontWeight: '600'
+                              }}
+                            >
+                              Create Account & Check In
+                            </button>
+                            <button
+                              onClick={resetManualCheckInModal}
+                              className="btn btn-outline"
+                              disabled={loading}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

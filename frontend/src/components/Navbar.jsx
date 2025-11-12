@@ -51,7 +51,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
   ]
 
   const staffMenu = [
-    { id: 'dashboard', label: 'Queue Management', icon: '📊', path: '/staff' },
+    { id: 'dashboard', label: 'Queue', icon: '📊', path: '/staff' },
     { id: 'appointments', label: 'Appointments', icon: '📅', path: '/staff/appointments' },
     { id: 'doctors', label: 'Doctors', icon: '👨‍⚕️', path: '/staff/doctors' },
     { id: 'reports', label: 'Reports', icon: '📈', path: '/staff/reports' },
