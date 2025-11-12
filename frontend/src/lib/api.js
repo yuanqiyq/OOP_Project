@@ -184,5 +184,33 @@ export const reportAPI = {
       throw error
     }
   },
+  getDailyReport: async (clinicId, date) => {
+    const params = new URLSearchParams()
+    params.append('clinicId', clinicId)
+    if (date) params.append('date', date)
+    
+    const url = `${API_BASE_URL}/report/daily?${params.toString()}`
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `HTTP error! status: ${response.status}`)
+      }
+      
+      // Get the PDF blob
+      const blob = await response.blob()
+      return blob
+    } catch (error) {
+      console.error('Daily Report API Error:', error)
+      throw error
+    }
+  },
 }
 

@@ -53,6 +53,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
     { id: 'dashboard', label: 'Queue Management', icon: '📊', path: '/staff' },
     { id: 'appointments', label: 'Appointments', icon: '📅', path: '/staff/appointments' },
     { id: 'doctors', label: 'Doctors', icon: '👨‍⚕️', path: '/staff/doctors' },
+    { id: 'reports', label: 'Reports', icon: '📈', path: '/staff/reports' },
     { id: 'display', label: 'Display', icon: '🖥️', path: '/staff/display', openInNewTab: true },
     { id: 'settings', label: 'Settings', icon: '⚙️', path: '/staff/settings' },
   ]
@@ -95,7 +96,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
       currentPath === item.path || 
       (item.id === 'dashboard' && (currentPath === '/patient' || currentPath === '/staff' || currentPath === '/admin' || 
        currentPath.startsWith('/patient/') && !currentPath.includes('/appointments') && !currentPath.includes('/settings') && !currentPath.includes('/medical-history') ||
-       currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') && !currentPath.includes('/display') ||
+       currentPath.startsWith('/staff/') && !currentPath.includes('/appointments') && !currentPath.includes('/doctors') && !currentPath.includes('/settings') && !currentPath.includes('/display') && !currentPath.includes('/reports') ||
        currentPath.startsWith('/admin/') && !currentPath.includes('/users') && !currentPath.includes('/clinics') && !currentPath.includes('/reports') && !currentPath.includes('/settings'))) ||
       (item.id === 'appointments' && (currentPath.startsWith('/patient/appointments') || currentPath.startsWith('/patient/book'))) ||
       (item.id === 'medical-history' && currentPath.startsWith('/patient/medical-history')) ||
@@ -108,7 +109,7 @@ export default function Navbar({ currentPage = 'dashboard' }) {
       <div className="navbar-container">
         <div className="navbar-brand">
           <div className="brand-icon">🏥</div>
-          <span className="brand-text">Queue Management</span>
+          <span className="brand-text">MediQ</span>
         </div>
         
         <div className="navbar-menu">

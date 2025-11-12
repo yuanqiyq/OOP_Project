@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { queueAPI, appointmentAPI, clinicAPI, adminAPI, doctorAPI } from '../lib/api'
+import { queueAPI, appointmentAPI, clinicAPI, adminAPI, doctorAPI, reportAPI } from '../lib/api'
 import Navbar from '../components/Navbar'
 import Toast from '../components/Toast'
 import { useLocation } from 'react-router-dom'
@@ -81,6 +81,10 @@ export default function StaffView() {
   const [timeSlots, setTimeSlots] = useState([])
   const [existingAppointments, setExistingAppointments] = useState([])
   const [showBookingModal, setShowBookingModal] = useState(false)
+
+  // Report state
+  const [reportDate, setReportDate] = useState('')
+  const [generatingReport, setGeneratingReport] = useState(false)
 
   // Helper function to show toast notifications
   const showToast = (message, type = 'success') => {
@@ -1188,8 +1192,43 @@ export default function StaffView() {
   const getCurrentView = () => {
     if (location.pathname.includes('/appointments')) return 'appointments'
     if (location.pathname.includes('/doctors')) return 'doctors'
+    if (location.pathname.includes('/reports')) return 'reports'
     if (location.pathname.includes('/settings')) return 'settings'
     return 'dashboard'
+  }
+
+  const handleGenerateDailyReport = async () => {
+    if (!clinicId) {
+      showToast('Clinic ID not available', 'error')
+      return
+    }
+
+    try {
+      setGeneratingReport(true)
+
+      const blob = await reportAPI.getDailyReport(clinicId, reportDate || null)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Generate filename
+      const dateStr = reportDate || new Date().toISOString().split('T')[0]
+      link.download = `DailyClinicReport_${clinicName.replace(/\s+/g, '_')}_${dateStr}.pdf`
+      
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      showToast('Report generated and downloaded successfully', 'success')
+    } catch (err) {
+      showToast(err.message || 'Failed to generate report', 'error')
+      console.error('Failed to generate daily report', err)
+    } finally {
+      setGeneratingReport(false)
+    }
   }
 
   const getDayLabel = (day) => {
@@ -2573,6 +2612,55 @@ export default function StaffView() {
                   </div>
                 </div>
               )}
+            </>
+          )}
+
+          {currentView === 'reports' && (
+            <>
+              <div className="page-header">
+                <h1>Daily Clinic Report</h1>
+                <p className="subtitle">
+                  {clinicName || `Clinic ID: ${clinicId}`}
+                </p>
+              </div>
+
+              <div className="section-card">
+                <h2>Generate Daily Report</h2>
+                <div className="report-content">
+                  <div className="report-info">
+                    <p className="report-description">
+                      Generate a comprehensive daily report including:
+                    </p>
+                    <ul className="report-metrics-list">
+                      <li>📊 <strong>Patients Seen</strong> - Number of queue logs with status = 'completed'</li>
+                      <li>⏱️ <strong>Average Waiting Time</strong> - Difference between appointment_start and created_at in queue_log</li>
+                      <li>🚫 <strong>No-Show Rate</strong> - Appointments without a queue_log entry for that day</li>
+                    </ul>
+                  </div>
+                  <div className="report-form">
+                    <div className="form-group">
+                      <label htmlFor="reportDate">Report Date (optional, defaults to today)</label>
+                      <input
+                        type="date"
+                        id="reportDate"
+                        value={reportDate}
+                        onChange={(e) => setReportDate(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-actions">
+                      <button
+                        onClick={handleGenerateDailyReport}
+                        className="btn btn-primary"
+                        disabled={generatingReport || !clinicId}
+                      >
+                        {generatingReport ? 'Generating PDF...' : '📄 Generate & Download PDF Report'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
