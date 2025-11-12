@@ -6,6 +6,7 @@ import com.example.backend.dto.StaffDTO;
 import com.example.backend.dto.CreateStaffRequestDTO;
 import com.example.backend.dto.CreatePatientRequestDTO;
 import com.example.backend.dto.UpdateStaffRequestDTO;
+import com.example.backend.dto.ErrorResponse;
 import com.example.backend.service.PatientService;
 import com.example.backend.service.StaffService;
 import jakarta.validation.Valid;
