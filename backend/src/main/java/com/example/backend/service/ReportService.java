@@ -156,6 +156,7 @@ public class ReportService {
     /**
      * Calculate no-show rate as percentage
      * No-show = appointments explicitly marked with NO_SHOW status
+     * Rate = (appointments with NO_SHOW status) / (ALL appointments) * 100
      *
      * @param clinicId The clinic ID
      * @param date     The date to query
@@ -179,7 +180,7 @@ public class ReportService {
                 .filter(appt -> appt.getApptStatus().getValue().equalsIgnoreCase("no-show"))
                 .count();
 
-        // Calculate percentage
+        // Calculate percentage based on ALL appointments
         return (double) noShowCount / appointments.size() * 100.0;
     }
 }

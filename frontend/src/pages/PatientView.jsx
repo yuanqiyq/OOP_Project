@@ -280,7 +280,14 @@ export default function PatientView() {
       
       // Calculate stats
       const now = new Date()
-      const upcoming = data?.filter(apt => new Date(apt.dateTime) > now) || []
+      const upcoming = data?.filter(apt => {
+        const status = apt.apptStatus?.toUpperCase() || ''
+        return new Date(apt.dateTime) > now && 
+               status !== 'CANCELLED' && 
+               status !== 'COMPLETED' && 
+               status !== 'MISSED' && 
+               status !== 'NO-SHOW'
+      }) || []
       const completed = data?.filter(apt => apt.apptStatus === 'COMPLETED') || []
       
       setStats({
@@ -350,11 +357,11 @@ export default function PatientView() {
   // Filter appointments based on selected filter (for upcoming appointments tab)
   const getFilteredAppointments = () => {
     const now = new Date()
-    // Always show upcoming appointments that are not cancelled, not completed, and not missed
+    // Always show upcoming appointments that are not cancelled, not completed, not missed, and not no-show
     return appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
       const aptDate = new Date(apt.dateTime)
-      return aptDate > now && status !== 'CANCELLED' && status !== 'COMPLETED' && status !== 'MISSED'
+      return aptDate > now && status !== 'CANCELLED' && status !== 'COMPLETED' && status !== 'MISSED' && status !== 'NO-SHOW'
     })
   }
 
@@ -421,12 +428,15 @@ export default function PatientView() {
         return true
       }
       
-      // Include all past appointments (by date/time) that are not cancelled
-      // This includes: ARRIVED, NO_SHOW, MISSED, and even SCHEDULED if in the past
+      // Include all past appointments (by date/time) that are not cancelled, not missed, and not no-show
+      // This includes: ARRIVED and even SCHEDULED if in the past
+      // NO-SHOW and MISSED go to archive instead
       const isPast = aptDate <= now
       const isNotCancelled = status !== 'CANCELLED'
+      const isNotMissed = status !== 'MISSED'
+      const isNotNoShow = status !== 'NO-SHOW'
       
-      return isPast && isNotCancelled
+      return isPast && isNotCancelled && isNotMissed && isNotNoShow
     })
     
     // Sort by date descending (most recent first)
@@ -439,11 +449,11 @@ export default function PatientView() {
     return applyMedicalHistoryFilters(sorted)
   }
 
-  // Get cancelled and missed appointments for archive
+  // Get cancelled, missed, and no-show appointments for archive
   const getCancelledAppointments = () => {
     const archived = appointments.filter(apt => {
       const status = apt.apptStatus?.toUpperCase() || ''
-      return status === 'CANCELLED' || status === 'MISSED'
+      return status === 'CANCELLED' || status === 'MISSED' || status === 'NO-SHOW'
     })
     return applyMedicalHistoryFilters(archived)
   }
@@ -2027,7 +2037,7 @@ export default function PatientView() {
                 </div>
               )}
 
-              {/* Archive (Cancelled and Missed) */}
+              {/* Archive (Cancelled, Missed, and No-Show) */}
               {medicalHistoryFilter === 'archive' && (
                 <div className="section-card">
                   <div className="section-header">
