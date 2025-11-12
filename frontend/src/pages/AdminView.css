@@ -77,7 +77,7 @@
 .header-actions,
 .header-controls {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -749,6 +749,95 @@
   color: var(--teal-dark);
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+/* Clinic Filter Wrapper */
+.clinic-filter-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 250px;
+  justify-content: flex-end;
+}
+
+.clinic-filter-wrapper label {
+  color: var(--teal-dark);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+
+/* Searchable Dropdown */
+.searchable-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 2px solid rgba(78, 205, 196, 0.2);
+  border-radius: 10px;
+  margin-top: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(78, 205, 196, 0.15);
+}
+
+.dropdown-item {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 1px solid rgba(78, 205, 196, 0.1);
+}
+
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item:hover {
+  background: var(--gradient-glow);
+  color: var(--teal-primary);
+}
+
+.searchable-dropdown input {
+  padding-right: 32px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.clear-filter-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #c62828;
+  font-size: 1.25rem;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+  line-height: 1;
+  z-index: 10;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.clear-filter-btn:hover {
+  background: rgba(198, 40, 40, 0.1);
+  color: #b71c1c;
 }
 
 .select-input {

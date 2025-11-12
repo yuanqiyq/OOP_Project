@@ -38,6 +38,10 @@ export default function AdminView() {
   const [newDoctor, setNewDoctor] = useState({ fname: '', lname: '', assignedClinic: null, shiftDays: [] })
   const [filledDays, setFilledDays] = useState(new Set())
   const [selectedClinicFilter, setSelectedClinicFilter] = useState(null)
+  const [clinicFilterSearch, setClinicFilterSearch] = useState('')
+  const [showClinicFilterDropdown, setShowClinicFilterDropdown] = useState(false)
+  const [doctorPage, setDoctorPage] = useState(1)
+  const [doctorsPerPage] = useState(20)
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalStaff: 0,
@@ -635,15 +639,19 @@ export default function AdminView() {
 
   // Handle edit doctor
   const handleEditDoctor = (doctor) => {
-    setEditingDoctor({ ...doctor, shiftDays: doctor.shiftDays || [] })
+    // Ensure shiftDays is always an array
+    const shiftDaysArray = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+    setEditingDoctor({ ...doctor, shiftDays: shiftDaysArray })
     setShowEditDoctorModal(true)
     // Recalculate filled days excluding this doctor
     const filled = new Set()
     doctors.forEach(d => {
       if (d.shiftDays && d.id !== doctor.id) {
-        // Only count filled days for doctors in the same clinic
-        if (!selectedClinicFilter || d.assignedClinic === selectedClinicFilter) {
-          d.shiftDays.forEach(day => filled.add(day))
+        // Only count filled days for doctors in the same clinic as the doctor being edited
+        const doctorClinic = doctor.assignedClinic
+        if (!doctorClinic || d.assignedClinic === doctorClinic) {
+          const days = Array.isArray(d.shiftDays) ? d.shiftDays : (d.shiftDays ? [d.shiftDays] : [])
+          days.forEach(day => filled.add(day))
         }
       }
     })
@@ -734,9 +742,51 @@ export default function AdminView() {
   useEffect(() => {
     if (location.pathname.includes('/doctors')) {
       fetchDoctorsForView()
+      setDoctorPage(1) // Reset to first page when filter changes
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedClinicFilter, location.pathname])
+
+  // Close clinic filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const target = event.target
+      const isInsideDropdown = target.closest('.searchable-dropdown') !== null || 
+                               target.closest('.dropdown-menu') !== null ||
+                               target.closest('.dropdown-item') !== null ||
+                               target.closest('.clear-filter-btn') !== null
+      
+      if (!isInsideDropdown) {
+        setShowClinicFilterDropdown(false)
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside, true)
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true)
+    }
+  }, [])
+
+  // Filter clinics based on search text
+  const getFilteredClinicsForFilter = () => {
+    if (!clinicFilterSearch) return clinics
+    return clinics.filter(clinic =>
+      clinic.name?.toLowerCase().includes(clinicFilterSearch.toLowerCase())
+    )
+  }
+
+  // Update clinic filter search when selected clinic changes
+  useEffect(() => {
+    if (selectedClinicFilter) {
+      const clinic = clinics.find(c => c.id === selectedClinicFilter)
+      if (clinic) {
+        setClinicFilterSearch(clinic.name)
+      }
+    } else {
+      setClinicFilterSearch('')
+    }
+  }, [selectedClinicFilter, clinics])
 
   const getCurrentView = () => {
     if (location.pathname.includes('/users')) return 'users'
@@ -1614,25 +1664,93 @@ export default function AdminView() {
             )
           })()}
 
-          {currentView === 'doctors' && (
+          {currentView === 'doctors' && (() => {
+            // Calculate pagination
+            const totalPages = Math.ceil(doctors.length / doctorsPerPage)
+            const startIndex = (doctorPage - 1) * doctorsPerPage
+            const endIndex = startIndex + doctorsPerPage
+            const paginatedDoctors = doctors.slice(startIndex, endIndex)
+
+            return (
             <>
               <div className="page-header">
                 <h1>Doctors</h1>
                 <div className="header-controls">
-                  <div className="form-group" style={{ margin: 0, minWidth: '250px' }}>
-                    <label htmlFor="clinic-filter" style={{ marginBottom: '0.5rem', display: 'block' }}>Filter by Clinic</label>
-                    <select
-                      id="clinic-filter"
-                      value={selectedClinicFilter || ''}
-                      onChange={(e) => setSelectedClinicFilter(e.target.value ? parseInt(e.target.value) : null)}
-                      className="form-input"
-                      style={{ width: '100%' }}
-                    >
-                      <option value="">All Clinics</option>
-                      {clinics.map(clinic => (
-                        <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
-                      ))}
-                    </select>
+                  <div className="clinic-filter-wrapper">
+                    <label htmlFor="clinic-filter">Filter by Clinic</label>
+                    <div className="searchable-dropdown">
+                      <input
+                        id="clinic-filter"
+                        type="text"
+                        placeholder="Search clinics"
+                        value={clinicFilterSearch}
+                        onChange={(e) => {
+                          setClinicFilterSearch(e.target.value)
+                          setShowClinicFilterDropdown(true)
+                          // Clear filter if search is empty
+                          if (!e.target.value) {
+                            setSelectedClinicFilter(null)
+                          }
+                        }}
+                        onFocus={() => setShowClinicFilterDropdown(true)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="input-sm"
+                      />
+                      {showClinicFilterDropdown && (
+                        <div className="dropdown-menu" onClick={(e) => e.stopPropagation()}>
+                          {!clinicFilterSearch && (
+                            <div
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedClinicFilter(null)
+                                setClinicFilterSearch('')
+                                setShowClinicFilterDropdown(false)
+                                setDoctorPage(1)
+                              }}
+                            >
+                              All Clinics
+                            </div>
+                          )}
+                          {getFilteredClinicsForFilter().map((clinic) => (
+                            <div
+                              key={clinic.id}
+                              className="dropdown-item"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedClinicFilter(clinic.id)
+                                setClinicFilterSearch(clinic.name)
+                                setShowClinicFilterDropdown(false)
+                                setDoctorPage(1)
+                              }}
+                            >
+                              {clinic.name}
+                            </div>
+                          ))}
+                          {clinicFilterSearch && getFilteredClinicsForFilter().length === 0 && (
+                            <div className="dropdown-item" style={{ color: '#999', cursor: 'default' }}>
+                              No clinics found
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {selectedClinicFilter && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedClinicFilter(null)
+                            setClinicFilterSearch('')
+                            setShowClinicFilterDropdown(false)
+                            setDoctorPage(1)
+                          }}
+                          type="button"
+                          aria-label="Clear clinic filter"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <button onClick={() => {
                     // Recalculate filled days when opening add modal
@@ -1641,7 +1759,8 @@ export default function AdminView() {
                       if (doctor.shiftDays && doctor.shiftDays.length > 0) {
                         // Only count filled days for doctors in the same clinic
                         if (!selectedClinicFilter || doctor.assignedClinic === selectedClinicFilter) {
-                          doctor.shiftDays.forEach(day => filled.add(day))
+                          const days = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+                          days.forEach(day => filled.add(day))
                         }
                       }
                     })
@@ -1650,9 +1769,6 @@ export default function AdminView() {
                     setShowAddDoctorModal(true)
                   }} className="btn btn-primary">
                     + Add Doctor
-                  </button>
-                  <button onClick={fetchDoctorsForView} className="btn btn-secondary">
-                    Refresh
                   </button>
                 </div>
               </div>
@@ -1683,53 +1799,80 @@ export default function AdminView() {
                     </button>
                   </div>
                 ) : (
-                  <div className="doctors-grid">
-                    {doctors.map((doctor) => (
-                      <div key={doctor.id} className="doctor-card">
-                        <div className="doctor-header">
-                          <h3>Dr. {doctor.fname} {doctor.lname}</h3>
-                          <span className="doctor-id">ID: {doctor.id}</span>
-                        </div>
-                        <div className="doctor-details">
-                          <div className="detail-item">
-                            <span className="detail-label">Clinic:</span>
-                            <span className="detail-value">
-                              {doctor.assignedClinic 
-                                ? clinics.find(c => c.id === doctor.assignedClinic)?.name || `Clinic ID: ${doctor.assignedClinic}`
-                                : 'Unassigned'}
-                            </span>
-                          </div>
-                          {doctor.shiftDays && doctor.shiftDays.length > 0 ? (
-                            <div className="doctor-shifts">
-                              <span className="detail-label">Shift Days:</span>
-                              <div className="shift-days-display">
-                                {[1, 2, 3, 4, 5, 6, 7].map(day => (
-                                  <span
-                                    key={day}
-                                    className={`shift-day-badge ${doctor.shiftDays.includes(day) ? 'active' : 'inactive'}`}
-                                    title={getDayFullName(day)}
-                                  >
-                                    {getDayLabel(day)}
-                                  </span>
-                                ))}
-                              </div>
+                  <>
+                    <div className="doctors-grid">
+                      {paginatedDoctors.map((doctor) => {
+                        const doctorShiftDays = Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : [])
+                        return (
+                          <div key={doctor.id} className="doctor-card">
+                            <div className="doctor-header">
+                              <h3>Dr. {doctor.fname} {doctor.lname}</h3>
+                              <span className="doctor-id">ID: {doctor.id}</span>
                             </div>
-                          ) : (
-                            <p className="no-shifts">No shift days assigned</p>
-                          )}
-                        </div>
-                        <div className="doctor-actions">
-                          <button
-                            onClick={() => handleEditDoctor(doctor)}
-                            className="btn btn-secondary btn-sm"
-                            disabled={loading}
-                          >
-                            ✏️ Edit
-                          </button>
-                        </div>
+                            <div className="doctor-details">
+                              <div className="detail-item">
+                                <span className="detail-label">Clinic:</span>
+                                <span className="detail-value">
+                                  {doctor.assignedClinic 
+                                    ? clinics.find(c => c.id === doctor.assignedClinic)?.name || `Clinic ID: ${doctor.assignedClinic}`
+                                    : 'Unassigned'}
+                                </span>
+                              </div>
+                              {doctorShiftDays.length > 0 ? (
+                                <div className="doctor-shifts">
+                                  <span className="detail-label">Shift Days:</span>
+                                  <div className="shift-days-display">
+                                    {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                                      <span
+                                        key={day}
+                                        className={`shift-day-badge ${doctorShiftDays.includes(day) ? 'active' : 'inactive'}`}
+                                        title={getDayFullName(day)}
+                                      >
+                                        {getDayLabel(day)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="no-shifts">No shift days assigned</p>
+                              )}
+                            </div>
+                            <div className="doctor-actions">
+                              <button
+                                onClick={() => handleEditDoctor(doctor)}
+                                className="btn btn-secondary btn-sm"
+                                disabled={loading}
+                              >
+                                ✏️ Edit
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="pagination-controls">
+                        <button
+                          onClick={() => setDoctorPage(prev => Math.max(1, prev - 1))}
+                          disabled={doctorPage === 1}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          ← Previous
+                        </button>
+                        <span className="pagination-info">
+                          Page {doctorPage} of {totalPages} 
+                          ({startIndex + 1}-{Math.min(endIndex, doctors.length)} of {doctors.length})
+                        </span>
+                        <button
+                          onClick={() => setDoctorPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={doctorPage === totalPages}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Next →
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1787,7 +1930,8 @@ export default function AdminView() {
                         <div className="shift-days-selector">
                           {[1, 2, 3, 4, 5, 6, 7].map(day => {
                             const isFilled = filledDays.has(day)
-                            const isSelected = editingDoctor.shiftDays.includes(day)
+                            const shiftDaysArray = Array.isArray(editingDoctor.shiftDays) ? editingDoctor.shiftDays : (editingDoctor.shiftDays ? [editingDoctor.shiftDays] : [])
+                            const isSelected = shiftDaysArray.includes(day)
                             return (
                               <button
                                 key={day}
@@ -1803,9 +1947,9 @@ export default function AdminView() {
                             )
                           })}
                         </div>
-                        {editingDoctor.shiftDays.length > 0 && (
+                        {editingDoctor.shiftDays && editingDoctor.shiftDays.length > 0 && (
                           <div className="selected-days-info">
-                            <p>Selected: {editingDoctor.shiftDays.map(d => getDayFullName(d)).join(', ')}</p>
+                            <p>Selected: {Array.isArray(editingDoctor.shiftDays) ? editingDoctor.shiftDays.map(d => getDayFullName(d)).join(', ') : getDayFullName(editingDoctor.shiftDays)}</p>
                           </div>
                         )}
                       </div>
@@ -1942,7 +2086,8 @@ export default function AdminView() {
                 </div>
               )}
             </>
-          )}
+            )
+          })()}
 
           {currentView === 'reports' && (
             <>
