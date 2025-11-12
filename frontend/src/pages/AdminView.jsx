@@ -680,7 +680,31 @@ export default function AdminView() {
 
       // If it's a patient, also update patient details
       if (editingUserData.role === 'PATIENT' && editingUserData.patientData) {
-        await adminAPI.updatePatient(editingUserId, editingUserData.patientData)
+        // Find the patient to get the correct patient ID
+        const patient = patients.find(p => p.userId === editingUserId)
+        if (!patient) {
+          throw new Error('Patient not found')
+        }
+        
+        // Helper function to convert empty strings to null
+        const toNullIfEmpty = (value) => (value === '' || value === null || value === undefined) ? null : value
+        
+        // Convert empty strings to null and format dateOfBirth properly
+        const patientUpdateData = {
+          patientIc: toNullIfEmpty(editingUserData.patientData.patientIc),
+          dateOfBirth: toNullIfEmpty(editingUserData.patientData.dateOfBirth),
+          gender: toNullIfEmpty(editingUserData.patientData.gender),
+          emergencyContact: toNullIfEmpty(editingUserData.patientData.emergencyContact),
+          emergencyContactPhone: toNullIfEmpty(editingUserData.patientData.emergencyContactPhone),
+          medicalHistory: toNullIfEmpty(editingUserData.patientData.medicalHistory),
+          allergies: toNullIfEmpty(editingUserData.patientData.allergies),
+          bloodType: toNullIfEmpty(editingUserData.patientData.bloodType),
+        }
+        
+        // Use patient's ID (which should be the same as userId for Patient entity)
+        // Patient extends User, so the primary key is userId
+        const patientId = patient.userId || patient.id || editingUserId
+        await adminAPI.updatePatient(patientId, patientUpdateData)
       }
       
       // If it's a staff, also update staff details

@@ -595,28 +595,34 @@
 
 .appointment-details {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 1rem;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 .detail-item {
   display: flex;
-  justify-content: space-between;
-  padding: 0.75rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
   background: var(--gradient-glow);
   border-radius: 10px;
   border: 1px solid rgba(78, 205, 196, 0.1);
+  flex: 1;
+  min-width: 150px;
 }
 
 .detail-label {
   color: #666;
   font-weight: 500;
+  font-size: 0.85rem;
 }
 
 .detail-value {
   color: var(--teal-primary);
   font-weight: 600;
+  font-size: 0.95rem;
 }
 
 .appointment-actions {
@@ -1248,6 +1254,14 @@ select.input-sm:focus {
 
   .appointment-card-large {
     flex-direction: column;
+  }
+
+  .appointment-details {
+    flex-direction: column;
+  }
+
+  .detail-item {
+    min-width: 100%;
   }
 
   .appointment-actions-vertical {

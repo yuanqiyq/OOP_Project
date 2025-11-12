@@ -123,15 +123,28 @@ public class AdminController {
     
     // PUT /api/admin/patients/{id} - Update patient details
     @PutMapping("/patients/{id}")
-    public ResponseEntity<Patient> updatePatientDetails(@PathVariable Long id, @RequestBody Patient updatedPatient) {
+    public ResponseEntity<?> updatePatientDetails(@PathVariable Long id, @RequestBody Patient updatedPatient) {
         try {
             return patientService.updatePatientDetails(id, updatedPatient)
                     .map(patient -> ResponseEntity.ok(patient))
                     .orElse(ResponseEntity.notFound().build());
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
+            ErrorResponse errorResponse = new ErrorResponse(
+                    400,
+                    "Bad Request",
+                    e.getMessage(),
+                    "/api/admin/patients/" + id);
+            return ResponseEntity.badRequest().body(errorResponse);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+            // Log the error for debugging
+            System.err.println("Error updating patient: " + e.getClass().getName() + " - " + e.getMessage());
+            e.printStackTrace();
+            ErrorResponse errorResponse = new ErrorResponse(
+                    500,
+                    "Internal Server Error",
+                    "An unexpected error occurred: " + e.getMessage(),
+                    "/api/admin/patients/" + id);
+            return ResponseEntity.status(500).body(errorResponse);
         }
     }
     
