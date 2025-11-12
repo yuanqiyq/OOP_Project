@@ -101,12 +101,7 @@ export default function StaffView() {
     lname: '',
     patientIc: '',
     dateOfBirth: '',
-    gender: 'Male',
-    emergencyContact: '',
-    emergencyContactPhone: '',
-    medicalHistory: '',
-    allergies: '',
-    bloodType: '',
+    gender: '',
   })
   const [checkInAppointmentData, setCheckInAppointmentData] = useState({
     doctorId: null,
@@ -119,8 +114,8 @@ export default function StaffView() {
   const [checkInExistingAppointments, setCheckInExistingAppointments] = useState([])
 
   // Helper function to show toast notifications
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type })
+  const showToast = (message, type = 'success', duration = 3000) => {
+    setToast({ message, type, duration })
   }
 
   // Helper function to get priority label
@@ -201,12 +196,7 @@ export default function StaffView() {
       lname: '',
       patientIc: '',
       dateOfBirth: '',
-      gender: 'Male',
-      emergencyContact: '',
-      emergencyContactPhone: '',
-      medicalHistory: '',
-      allergies: '',
-      bloodType: '',
+      gender: '',
     })
     setCheckInAppointmentData({
       doctorId: null,
@@ -217,6 +207,7 @@ export default function StaffView() {
     setGeneratedPassword('')
     setAvailableTimeSlots([])
     setCheckInExistingAppointments([])
+    setLoading(false) // Ensure loading is reset
   }
 
   // Generate time slots for selected doctor and date
@@ -361,6 +352,7 @@ export default function StaffView() {
         setIgnoreAuthChanges(true)
 
         // Create Supabase Auth account
+        console.log('Creating Supabase Auth account for:', newPatientFormData.email)
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: newPatientFormData.email,
           password: password,
@@ -369,43 +361,70 @@ export default function StaffView() {
           },
         })
 
-        if (authError) throw authError
-        if (!authData.user) throw new Error('Failed to create user in Supabase Auth')
+        if (authError) {
+          console.error('Supabase Auth signup error:', authError)
+          throw new Error(`Failed to create auth account: ${authError.message}`)
+        }
+        if (!authData.user) {
+          console.error('No user returned from signup')
+          throw new Error('Failed to create user in Supabase Auth')
+        }
 
-        // Immediately send password reset email
+        console.log('Auth account created successfully, user ID:', authData.user.id)
+
+        // Immediately restore the original staff session BEFORE creating patient record
+        console.log('Restoring staff session...')
+        const { error: sessionRestoreError } = await supabase.auth.setSession({
+          access_token: currentSession.access_token,
+          refresh_token: currentSession.refresh_token,
+        })
+
+        if (sessionRestoreError) {
+          console.error('Failed to restore staff session:', sessionRestoreError)
+          throw new Error(`Failed to restore staff session: ${sessionRestoreError.message}`)
+        }
+
+        // Small delay to ensure session is restored before proceeding
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        // Verify session is restored
+        const { data: { session: restoredSession } } = await supabase.auth.getSession()
+        if (!restoredSession || restoredSession.user.id !== currentSession.user.id) {
+          throw new Error('Failed to verify staff session restoration')
+        }
+        console.log('Staff session restored successfully')
+
+        // Create patient record
+        console.log('Creating patient record in backend...')
+        let createdPatient
+        try {
+          createdPatient = await adminAPI.createPatient({
+            authUuid: authData.user.id,
+            email: newPatientFormData.email,
+            fname: newPatientFormData.fname,
+            lname: newPatientFormData.lname,
+            role: 'PATIENT',
+            patientIc: newPatientFormData.patientIc,
+            dateOfBirth: newPatientFormData.dateOfBirth,
+            gender: newPatientFormData.gender,
+          })
+          console.log('Patient record created:', createdPatient)
+        } catch (patientError) {
+          console.error('Failed to create patient record:', patientError)
+          throw new Error(`Failed to create patient record: ${patientError.message || patientError}`)
+        }
+
+        // Send password reset email AFTER patient record is created
+        console.log('Sending password reset email...')
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(newPatientFormData.email, {
           redirectTo: window.location.origin + '/auth',
         })
         if (resetError) {
           console.warn('Failed to send password reset email:', resetError)
-          // Don't throw, just warn
+          // Don't throw, just warn - password is already generated and will be shown
+        } else {
+          console.log('Password reset email sent successfully')
         }
-
-        // Immediately restore the original staff session
-        await supabase.auth.setSession({
-          access_token: currentSession.access_token,
-          refresh_token: currentSession.refresh_token,
-        })
-
-        // Small delay to ensure session is restored before proceeding
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        // Create patient record
-        const createdPatient = await adminAPI.createPatient({
-          authUuid: authData.user.id,
-          email: newPatientFormData.email,
-          fname: newPatientFormData.fname,
-          lname: newPatientFormData.lname,
-          role: 'PATIENT',
-          patientIc: newPatientFormData.patientIc,
-          dateOfBirth: newPatientFormData.dateOfBirth,
-          gender: newPatientFormData.gender,
-          emergencyContact: newPatientFormData.emergencyContact || null,
-          emergencyContactPhone: newPatientFormData.emergencyContactPhone || null,
-          medicalHistory: newPatientFormData.medicalHistory || null,
-          allergies: newPatientFormData.allergies || null,
-          bloodType: newPatientFormData.bloodType || null,
-        })
 
         // Patient extends User, so it has userId. patientId is the same as userId for Patient entities
         patientId = createdPatient.userId || createdPatient.patientId || createdPatient.id
@@ -484,19 +503,30 @@ export default function StaffView() {
 
       await queueAPI.checkIn(Number(appointmentId), checkInAppointmentData.priority)
 
-      // Show success message
-      if (password) {
-        showToast(`Patient checked in successfully! Generated password: ${password} (Password reset email sent)`, 'success')
-      } else {
-        showToast('Patient checked in successfully!', 'success')
-      }
+      console.log('Queue check-in successful')
 
-      // Refresh queue and appointments
+      // Refresh queue and appointments first
       await fetchQueue()
       await fetchAppointments()
 
-      // Close modal
-      resetManualCheckInModal()
+      // Show success message with password if new account was created
+      if (password) {
+        // Keep modal open to show password
+        setGeneratedPassword(password)
+        showToast('Account created and patient checked in! See password below.', 'success', 5000)
+        
+        // Also log it for staff reference
+        console.log('=== NEW PATIENT ACCOUNT CREATED ===')
+        console.log('Email:', newPatientFormData.email)
+        console.log('Generated Password:', password)
+        console.log('===================================')
+        
+        // Don't close modal yet - let staff see the password
+        // They can close it manually
+      } else {
+        showToast('Patient checked in successfully!', 'success')
+        resetManualCheckInModal()
+      }
     } catch (err) {
       console.error('Error during manual check-in:', err)
       const errorMessage = err.response?.data?.message || err.message || 'Failed to check in patient'
@@ -3390,6 +3420,75 @@ export default function StaffView() {
                           : 'Processing check-in...'}
                       </p>
                     </div>
+                  ) : generatedPassword ? (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '3rem',
+                      gap: '1.5rem',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '50%',
+                        background: 'var(--gradient-primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '2rem'
+                      }}>
+                        ✓
+                      </div>
+                      <div>
+                        <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--teal-dark)' }}>Account Created Successfully!</h3>
+                        <p style={{ margin: '0 0 1.5rem 0', color: '#666' }}>
+                          Patient has been checked in. Generated password:
+                        </p>
+                        <div style={{
+                          background: 'var(--gradient-glow)',
+                          border: '2px solid var(--teal-primary)',
+                          borderRadius: '12px',
+                          padding: '1.5rem',
+                          marginBottom: '1rem'
+                        }}>
+                          <div style={{
+                            fontSize: '0.875rem',
+                            color: '#666',
+                            marginBottom: '0.5rem',
+                            fontWeight: '500'
+                          }}>
+                            Generated Password
+                          </div>
+                          <div style={{
+                            fontSize: '1.5rem',
+                            fontFamily: 'monospace',
+                            fontWeight: '700',
+                            color: 'var(--teal-dark)',
+                            letterSpacing: '0.1em',
+                            wordBreak: 'break-all'
+                          }}>
+                            {generatedPassword}
+                          </div>
+                        </div>
+                        <p style={{ margin: '0 0 1.5rem 0', color: '#666', fontSize: '0.9rem' }}>
+                          A password reset email has been sent to <strong>{newPatientFormData.email}</strong>
+                        </p>
+                        <button
+                          onClick={resetManualCheckInModal}
+                          className="btn btn-primary"
+                          style={{
+                            padding: '0.875rem 2rem',
+                            fontSize: '1rem',
+                            fontWeight: '600'
+                          }}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       {/* Step 1: Search Patient */}
@@ -3817,7 +3916,25 @@ export default function StaffView() {
                       {/* Step 3: New Patient - Account Creation */}
                       {manualCheckInStep === 'new' && (
                         <div>
-                          <h3 style={{ marginTop: 0 }}>Create New Patient Account</h3>
+                          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                            <div style={{ 
+                              width: '64px', 
+                              height: '64px', 
+                              borderRadius: '50%', 
+                              background: 'var(--gradient-primary)', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              margin: '0 auto 1rem',
+                              fontSize: '2rem'
+                            }}>
+                              👤
+                            </div>
+                            <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--teal-dark)' }}>Create New Patient Account</h3>
+                            <p style={{ color: '#666', marginBottom: 0 }}>
+                              Fill in the required information to create a new patient account
+                            </p>
+                          </div>
                           <button
                             onClick={() => {
                               setManualCheckInStep('search')
@@ -3827,15 +3944,11 @@ export default function StaffView() {
                                 lname: '',
                                 patientIc: '',
                                 dateOfBirth: '',
-                                gender: 'Male',
-                                emergencyContact: '',
-                                emergencyContactPhone: '',
-                                medicalHistory: '',
-                                allergies: '',
-                                bloodType: '',
+                                gender: '',
                               })
                             }}
                             className="btn btn-outline"
+                            disabled={loading}
                             style={{ marginBottom: '1.5rem' }}
                           >
                             ← Back to Search
@@ -3843,136 +3956,111 @@ export default function StaffView() {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                               <div>
-                                <label>First Name *</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>First Name *</label>
                                 <input
                                   type="text"
                                   value={newPatientFormData.fname}
                                   onChange={(e) => setNewPatientFormData({ ...newPatientFormData, fname: e.target.value })}
                                   className="input"
                                   disabled={loading}
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
                                 />
                               </div>
                               <div>
-                                <label>Last Name *</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Last Name *</label>
                                 <input
                                   type="text"
                                   value={newPatientFormData.lname}
                                   onChange={(e) => setNewPatientFormData({ ...newPatientFormData, lname: e.target.value })}
                                   className="input"
                                   disabled={loading}
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
                                 />
                               </div>
                             </div>
                             <div>
-                              <label>Email *</label>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Email *</label>
                               <input
                                 type="email"
                                 value={newPatientFormData.email}
                                 onChange={(e) => setNewPatientFormData({ ...newPatientFormData, email: e.target.value })}
                                 className="input"
                                 disabled={loading}
+                                required
+                                style={{
+                                  width: '100%',
+                                  padding: '0.875rem 1rem',
+                                  fontSize: '1rem'
+                                }}
                               />
                             </div>
                             <div>
-                              <label>IC Number *</label>
+                              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>IC Number *</label>
                               <input
                                 type="text"
                                 value={newPatientFormData.patientIc}
                                 onChange={(e) => setNewPatientFormData({ ...newPatientFormData, patientIc: e.target.value })}
                                 className="input"
                                 disabled={loading}
+                                required
+                                placeholder="e.g., 123456789012"
+                                style={{
+                                  width: '100%',
+                                  padding: '0.875rem 1rem',
+                                  fontSize: '1rem'
+                                }}
                               />
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                               <div>
-                                <label>Date of Birth *</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Date of Birth *</label>
                                 <input
                                   type="date"
                                   value={newPatientFormData.dateOfBirth}
                                   onChange={(e) => setNewPatientFormData({ ...newPatientFormData, dateOfBirth: e.target.value })}
                                   className="input"
                                   disabled={loading}
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
                                 />
                               </div>
                               <div>
-                                <label>Gender *</label>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: 'var(--teal-dark)' }}>Gender *</label>
                                 <select
                                   value={newPatientFormData.gender}
                                   onChange={(e) => setNewPatientFormData({ ...newPatientFormData, gender: e.target.value })}
                                   className="input"
                                   disabled={loading}
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.875rem 1rem',
+                                    fontSize: '1rem'
+                                  }}
                                 >
+                                  <option value="">Select gender</option>
                                   <option value="Male">Male</option>
                                   <option value="Female">Female</option>
                                   <option value="Other">Other</option>
                                 </select>
                               </div>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                              <div>
-                                <label>Emergency Contact</label>
-                                <input
-                                  type="text"
-                                  value={newPatientFormData.emergencyContact}
-                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, emergencyContact: e.target.value })}
-                                  className="input"
-                                  disabled={loading}
-                                />
-                              </div>
-                              <div>
-                                <label>Emergency Phone</label>
-                                <input
-                                  type="tel"
-                                  value={newPatientFormData.emergencyContactPhone}
-                                  onChange={(e) => setNewPatientFormData({ ...newPatientFormData, emergencyContactPhone: e.target.value })}
-                                  className="input"
-                                  disabled={loading}
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label>Blood Type</label>
-                              <select
-                                value={newPatientFormData.bloodType}
-                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, bloodType: e.target.value })}
-                                className="input"
-                                disabled={loading}
-                              >
-                                <option value="">Select Blood Type</option>
-                                <option value="A+">A+</option>
-                                <option value="A-">A-</option>
-                                <option value="B+">B+</option>
-                                <option value="B-">B-</option>
-                                <option value="AB+">AB+</option>
-                                <option value="AB-">AB-</option>
-                                <option value="O+">O+</option>
-                                <option value="O-">O-</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label>Allergies</label>
-                              <textarea
-                                value={newPatientFormData.allergies}
-                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, allergies: e.target.value })}
-                                className="input"
-                                rows={3}
-                                disabled={loading}
-                                placeholder="List any allergies..."
-                              />
-                            </div>
-                            <div>
-                              <label>Medical History</label>
-                              <textarea
-                                value={newPatientFormData.medicalHistory}
-                                onChange={(e) => setNewPatientFormData({ ...newPatientFormData, medicalHistory: e.target.value })}
-                                className="input"
-                                rows={3}
-                                disabled={loading}
-                                placeholder="Previous medical conditions, surgeries, etc..."
-                              />
-                            </div>
                           </div>
-                          <div style={{ marginTop: '1.5rem' }}>
+                          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '2px solid rgba(78, 205, 196, 0.2)' }}>
                             <button
                               onClick={() => {
                                 setManualCheckInStep('appointment')
@@ -3980,8 +4068,25 @@ export default function StaffView() {
                               }}
                               className="btn btn-primary"
                               disabled={loading || !newPatientFormData.email || !newPatientFormData.fname || !newPatientFormData.lname || !newPatientFormData.patientIc || !newPatientFormData.dateOfBirth || !newPatientFormData.gender}
+                              style={{
+                                flex: 1,
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem',
+                                fontWeight: '600'
+                              }}
                             >
                               Continue to Appointment
+                            </button>
+                            <button
+                              onClick={resetManualCheckInModal}
+                              className="btn btn-outline"
+                              disabled={loading}
+                              style={{
+                                padding: '0.875rem 2rem',
+                                fontSize: '1rem'
+                              }}
+                            >
+                              Cancel
                             </button>
                           </div>
                         </div>
