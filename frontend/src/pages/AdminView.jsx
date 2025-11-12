@@ -43,6 +43,7 @@ export default function AdminView() {
   const [showUnassignConfirm, setShowUnassignConfirm] = useState(false)
   const [doctorToUnassign, setDoctorToUnassign] = useState(null)
   const [clinicToUnassignFrom, setClinicToUnassignFrom] = useState(null)
+  const [showEditDoctorUnassignConfirm, setShowEditDoctorUnassignConfirm] = useState(false)
   // Doctor management state for doctors view
   const [showAddDoctorModal, setShowAddDoctorModal] = useState(false)
   const [showEditDoctorModal, setShowEditDoctorModal] = useState(false)
@@ -2419,6 +2420,8 @@ export default function AdminView() {
           {currentView === 'doctors' && (() => {
             // Filter doctors by name search
             const filteredDoctors = getFilteredDoctors()
+            // Get unassigned doctors (not filtered by name search, but filtered by clinic filter)
+            const unassignedDoctors = doctors.filter(d => !d.assignedClinic)
             // Calculate pagination
             const totalPages = Math.ceil(filteredDoctors.length / doctorsPerPage)
             const startIndex = (doctorPage - 1) * doctorsPerPage
@@ -2589,6 +2592,57 @@ export default function AdminView() {
                 </div>
               </div>
 
+              {/* Unassigned Doctors Section */}
+              {unassignedDoctors.length > 0 && !selectedClinicFilter && (
+                <div className="section-card unassigned-doctors-section">
+                  <div className="section-header">
+                    <h2>Unassigned Doctors ({unassignedDoctors.length})</h2>
+                  </div>
+                  <div className="doctors-grid compact-grid">
+                    {unassignedDoctors.slice(0, 6).map((doctor) => (
+                      <div key={doctor.id} className="doctor-card unassigned-doctor-card">
+                        <div className="doctor-header">
+                          <h3>Dr. {doctor.fname} {doctor.lname}</h3>
+                          <span className="doctor-id">ID: {doctor.id}</span>
+                        </div>
+                        <div className="doctor-details">
+                          <div className="detail-item">
+                            <span className="detail-label">Clinic:</span>
+                            <span className="detail-value">Unassigned</span>
+                          </div>
+                        </div>
+                        <div className="doctor-actions">
+                          <button
+                            onClick={() => {
+                              setEditingDoctor({ ...doctor, shiftDays: Array.isArray(doctor.shiftDays) ? doctor.shiftDays : (doctor.shiftDays ? [doctor.shiftDays] : []) })
+                              // Calculate filled days for all clinics (since doctor is unassigned)
+                              const filled = new Set()
+                              doctors.forEach(d => {
+                                if (d.shiftDays && d.shiftDays.length > 0 && d.assignedClinic) {
+                                  const days = Array.isArray(d.shiftDays) ? d.shiftDays : (d.shiftDays ? [d.shiftDays] : [])
+                                  days.forEach(day => filled.add(day))
+                                }
+                              })
+                              setFilledDays(filled)
+                              setShowEditDoctorModal(true)
+                            }}
+                            className="btn btn-primary btn-sm"
+                            disabled={loading}
+                          >
+                            Assign to Clinic
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {unassignedDoctors.length > 6 && (
+                      <div className="view-more-hint">
+                        <p>+ {unassignedDoctors.length - 6} more unassigned doctor{unassignedDoctors.length - 6 !== 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="section-card">
                 <div className="section-header">
                   <h2>
@@ -2758,41 +2812,6 @@ export default function AdminView() {
                           ))}
                         </select>
                       </div>
-                      {editingDoctor.assignedClinic && (
-                        <div className="form-group">
-                          <label>Unassign from Clinic</label>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (confirm(`Are you sure you want to unassign this doctor from ${clinics.find(c => c.id === editingDoctor.assignedClinic)?.name || 'the clinic'}?`)) {
-                                try {
-                                  setLoading(true)
-                                  await doctorAPI.update(editingDoctor.id, { assignedClinic: null })
-                                  setToast({
-                                    message: 'Doctor unassigned successfully',
-                                    type: 'success'
-                                  })
-                                  setShowEditDoctorModal(false)
-                                  setEditingDoctor(null)
-                                  await fetchDoctorsForView()
-                                  await fetchDoctors()
-                                } catch (err) {
-                                  setToast({
-                                    message: err.message || 'Failed to unassign doctor',
-                                    type: 'error'
-                                  })
-                                } finally {
-                                  setLoading(false)
-                                }
-                              }
-                            }}
-                            className="btn btn-danger btn-sm"
-                            disabled={loading}
-                          >
-                            Unassign from Clinic
-                          </button>
-                        </div>
-                      )}
                       <div className="form-group">
                         <label>Shift Days</label>
                         <p className="form-hint">Select the days this doctor will work. Greyed out days are already assigned to other doctors in the same clinic. Leave empty if no shifts assigned.</p>
@@ -2823,6 +2842,18 @@ export default function AdminView() {
                         )}
                       </div>
                       <div className="modal-actions">
+                        {editingDoctor.assignedClinic && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowEditDoctorUnassignConfirm(true)
+                            }}
+                            className="btn btn-danger"
+                            disabled={loading}
+                          >
+                            Unassign from Clinic
+                          </button>
+                        )}
                         <button
                           onClick={updateDoctor}
                           className="btn btn-primary"
@@ -3198,7 +3229,7 @@ export default function AdminView() {
         </div>
       )}
 
-      {/* Unassign Confirmation Modal */}
+      {/* Unassign Confirmation Modal (from clinic card) */}
       {showUnassignConfirm && doctorToUnassign && (
         <div className="modal-overlay" onClick={() => {
           setShowUnassignConfirm(false)
@@ -3240,6 +3271,75 @@ export default function AdminView() {
                     setShowUnassignConfirm(false)
                     setDoctorToUnassign(null)
                     setClinicToUnassignFrom(null)
+                  }}
+                  className="btn btn-secondary"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unassign Confirmation Modal (from edit doctor modal) */}
+      {showEditDoctorUnassignConfirm && editingDoctor && editingDoctor.assignedClinic && (
+        <div className="modal-overlay" onClick={() => {
+          setShowEditDoctorUnassignConfirm(false)
+        }}>
+          <div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Confirm Unassign</h2>
+              <button
+                onClick={() => {
+                  setShowEditDoctorUnassignConfirm(false)
+                }}
+                className="modal-close"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="confirm-message">
+                Are you sure you want to unassign <strong>Dr. {editingDoctor.fname} {editingDoctor.lname}</strong> from {clinics.find(c => c.id === editingDoctor.assignedClinic)?.name || 'the clinic'}?
+              </p>
+              <p className="confirm-warning">
+                This will remove the doctor from the clinic and clear their shift days. You can reassign them later if needed.
+              </p>
+              <div className="modal-actions">
+                <button
+                  onClick={async () => {
+                    try {
+                      setLoading(true)
+                      await doctorAPI.update(editingDoctor.id, { assignedClinic: null })
+                      setToast({
+                        message: 'Doctor unassigned successfully',
+                        type: 'success'
+                      })
+                      setShowEditDoctorUnassignConfirm(false)
+                      setShowEditDoctorModal(false)
+                      setEditingDoctor(null)
+                      await fetchDoctorsForView()
+                      await fetchDoctors()
+                    } catch (err) {
+                      setToast({
+                        message: err.message || 'Failed to unassign doctor',
+                        type: 'error'
+                      })
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  className="btn btn-danger"
+                  disabled={loading}
+                >
+                  {loading ? 'Unassigning...' : 'Unassign'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditDoctorUnassignConfirm(false)
                   }}
                   className="btn btn-secondary"
                   disabled={loading}

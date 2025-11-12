@@ -1231,6 +1231,29 @@
   gap: 1.5rem;
 }
 
+.doctors-grid.compact-grid {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.unassigned-doctors-section {
+  margin-bottom: 2rem;
+}
+
+.unassigned-doctor-card {
+  background: var(--gradient-card);
+}
+
+.view-more-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  color: #666;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
 .doctor-card {
   background: var(--gradient-card);
   border-radius: 16px;
@@ -1611,16 +1634,16 @@
   gap: 1.5rem;
 }
 
-.assigned-doctors-section,
-.unassigned-doctors-section {
+.clinic-doctors-edit .assigned-doctors-section,
+.clinic-doctors-edit .unassigned-doctors-section {
   padding: 1rem;
   background: #ffffff;
   border-radius: 8px;
   border: 1px solid rgba(78, 205, 196, 0.1);
 }
 
-.assigned-doctors-section h4,
-.unassigned-doctors-section h4 {
+.clinic-doctors-edit .assigned-doctors-section h4,
+.clinic-doctors-edit .unassigned-doctors-section h4 {
   color: var(--teal-dark);
   font-size: 1rem;
   font-weight: 600;
