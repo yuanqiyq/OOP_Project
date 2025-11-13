@@ -23,8 +23,8 @@ RUN ./mvnw clean package -DskipTests
 # Stage 2: Run the application
 FROM eclipse-temurin:21-jre-alpine
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling and wget for healthchecks
+RUN apk add --no-cache dumb-init wget
 
 # Create a non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
@@ -46,7 +46,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
 
 # Run the application with dumb-init for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
