@@ -1,6 +1,8 @@
 // Use environment variable or fallback to localhost for development
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
 
+console.log('API Base URL:', API_BASE_URL);
+
 // Helper function to make API calls
 async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`
