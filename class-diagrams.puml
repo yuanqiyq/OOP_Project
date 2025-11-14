@@ -416,6 +416,57 @@ package "Service Layer" <<Rectangle>> {
         + deleteDoctor(Long): boolean
         + getDoctorsByClinicId(Long): List<Doctor>
     }
+    
+    class BackupService {
+        - userRepository: UserRepository
+        - patientRepository: PatientRepository
+        - staffRepository: StaffRepository
+        - doctorRepository: DoctorRepository
+        - clinicRepository: ClinicRepository
+        - appointmentRepository: AppointmentRepository
+        - queueRepository: QueueRepository
+        - backupDirectory: String
+        - objectMapper: ObjectMapper
+        __
+        + createBackup(): String
+        + listBackups(): List<BackupInfo>
+        + restoreBackup(String): void
+        + deleteBackup(String): void
+        + getBackupDetails(String): BackupDetails
+        - writeToZip(ZipOutputStream, String, String): void
+    }
+    
+    class ReportService {
+        - appointmentRepository: AppointmentRepository
+        - queueRepository: QueueRepository
+        - patientRepository: PatientRepository
+        - clinicRepository: ClinicRepository
+        __
+        + generateSystemUsageReport(LocalDate, LocalDate): byte[]
+        + generateDailyReport(Long, LocalDate): byte[]
+        - createPdfDocument(): Document
+        - addReportHeader(Document, String, LocalDate, LocalDate): void
+        - addMetricsSection(Document, Map<String, Object>): void
+    }
+    
+    class QueueSseService {
+        - queueService: QueueService
+        __
+        + createEmitter(Long): SseEmitter
+        + sendQueueUpdate(Long): void
+    }
+    
+    class SystemUsageReportService {
+        - appointmentRepository: AppointmentRepository
+        - queueRepository: QueueRepository
+        __
+        + calculateMetrics(LocalDate, LocalDate): Map<String, Object>
+        + getTotalAppointments(LocalDate, LocalDate): long
+        + getTotalCancellations(LocalDate, LocalDate): long
+        + getPatientsSeen(LocalDate, LocalDate): long
+        + getAverageWaitTime(LocalDate, LocalDate): double
+        + getNoShowRate(LocalDate, LocalDate): double
+    }
 }
 
 ' ==================== REPOSITORY INTERFACES ====================
@@ -570,6 +621,31 @@ package "Controller Layer" <<Rectangle>> {
         + sendThreePatientsAway(NotificationRequest): ResponseEntity<String>
         + sendYourTurn(NotificationRequest): ResponseEntity<String>
     }
+    
+    class BackupController {
+        - backupService: BackupService
+        __
+        + createBackup(): ResponseEntity<?>
+        + listBackups(): ResponseEntity<?>
+        + getBackupDetails(String): ResponseEntity<?>
+        + downloadBackup(String): ResponseEntity<?>
+        + restoreBackup(String): ResponseEntity<?>
+        + deleteBackup(String): ResponseEntity<?>
+        + healthCheck(): ResponseEntity<Map<String, Object>>
+    }
+    
+    class ReportController {
+        - reportService: ReportService
+        __
+        + generateSystemUsageReport(LocalDate, LocalDate): ResponseEntity<byte[]>
+        + generateDailyReport(Long, LocalDate): ResponseEntity<byte[]>
+    }
+    
+    class HealthController {
+        __
+        + healthCheck(): ResponseEntity<Map<String, String>>
+        + detailedHealthCheck(): ResponseEntity<Map<String, Object>>
+    }
 }
 
 ' ==================== RELATIONSHIPS ====================
@@ -613,6 +689,24 @@ ClinicService --> ClinicRepository : uses
 
 DoctorService --> DoctorRepository : uses
 
+BackupService --> UserRepository : uses
+BackupService --> PatientRepository : uses
+BackupService --> StaffRepository : uses
+BackupService --> DoctorRepository : uses
+BackupService --> ClinicRepository : uses
+BackupService --> AppointmentRepository : uses
+BackupService --> QueueRepository : uses
+
+ReportService --> AppointmentRepository : uses
+ReportService --> QueueRepository : uses
+ReportService --> PatientRepository : uses
+ReportService --> ClinicRepository : uses
+
+QueueSseService --> QueueService : uses
+
+SystemUsageReportService --> AppointmentRepository : uses
+SystemUsageReportService --> QueueRepository : uses
+
 ' Controller Dependencies
 AppointmentController --> AppointmentService : uses
 QueueController --> QueueService : uses
@@ -622,6 +716,8 @@ UserController --> UserService : uses
 ClinicController --> ClinicService : uses
 DoctorController --> DoctorService : uses
 NotificationController --> NotificationService : uses
+BackupController --> BackupService : uses
+ReportController --> ReportService : uses
 
 ' Repository extends JpaRepository
 AppointmentRepository --|> JpaRepository
@@ -672,6 +768,23 @@ note top of QueueService
   - Priority-based sorting
   - Automatic notifications (3 away, your turn)
   - SSE real-time updates
+end note
+
+note top of BackupService
+  Data Management:
+  - Full system backup (ZIP + JSON)
+  - Restore with data replacement
+  - Backup metadata & versioning
+  - Entity count tracking
+  - File management (list, delete, download)
+end note
+
+note top of ReportService
+  Report Generation:
+  - System usage reports (PDF)
+  - Daily clinic reports
+  - Metrics calculation
+  - iText PDF generation
 end note
 
 @enduml
