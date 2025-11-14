@@ -142,17 +142,22 @@
 }
 
 .queue-list-display::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .queue-list-display::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgba(78, 205, 196, 0.1);
   border-radius: 10px;
 }
 
 .queue-list-display::-webkit-scrollbar-thumb {
   background: var(--teal-primary);
   border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+.queue-list-display::-webkit-scrollbar-thumb:hover {
+  background: var(--teal-dark);
 }
 
 .queue-item-display {
@@ -265,17 +270,22 @@
 }
 
 .missed-list-display::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .missed-list-display::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgba(78, 205, 196, 0.1);
   border-radius: 10px;
 }
 
 .missed-list-display::-webkit-scrollbar-thumb {
   background: var(--teal-primary);
   border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+.missed-list-display::-webkit-scrollbar-thumb:hover {
+  background: var(--teal-dark);
 }
 
 .missed-item-display {

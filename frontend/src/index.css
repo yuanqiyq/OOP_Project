@@ -71,3 +71,33 @@ button {
 input, select, textarea {
   font-family: inherit;
 }
+
+/* Global Custom Scrollbar Styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--teal-primary) rgba(78, 205, 196, 0.1);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(78, 205, 196, 0.1);
+  border-radius: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--teal-primary);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--teal-dark);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

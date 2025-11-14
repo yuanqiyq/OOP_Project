@@ -1573,10 +1573,43 @@ select.input-sm:focus {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   animation: slideUp 0.3s ease-out;
   position: relative;
   padding: 0 !important;
+}
+
+/* Custom Scrollbar for Modal */
+.patient-view .modal-content::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.patient-view .modal-content::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track {
+  background: rgba(78, 205, 196, 0.1);
+  border-radius: 10px;
+  margin: 10px 0;
+}
+
+.patient-view .modal-content::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb {
+  background: var(--teal-primary);
+  border-radius: 10px;
+  transition: background 0.3s ease;
+}
+
+.patient-view .modal-content::-webkit-scrollbar-thumb:hover,
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--teal-dark);
+}
+
+/* Firefox scrollbar */
+.patient-view .modal-content,
+.modal-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--teal-primary) rgba(78, 205, 196, 0.1);
 }
 
 @keyframes slideUp {
