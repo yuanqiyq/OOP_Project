@@ -29,6 +29,7 @@ package "Frontend Layer\n(React 19 + Vite)" {
         [User Management]
         [System Reports]
         [Clinic Configuration]
+        [Backup & Restore]
     }
     
     component "Shared Components" as shared {
@@ -56,6 +57,7 @@ package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
         [ClinicController] as clinicCtrl
         [DoctorController] as doctorCtrl
         [ReportController] as reportCtrl
+        [BackupController] as backupCtrl
         [HealthController] as healthCtrl
     }
     
@@ -70,6 +72,9 @@ package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
         [ClinicService] as clinicSvc
         [DoctorService] as doctorSvc
         [ReportService] as reportSvc
+        [BackupService] as backupSvc
+        [QueueSseService] as sseSvc
+        [SystemUsageReportService] as sysReportSvc
     }
     
     ' Data Access Layer
@@ -131,6 +136,7 @@ apiLayer --> controllers : "HTTP/REST\n/api/*\nPort 8080"
 ' Controller to Service Layer
 apptCtrl --> apptSvc
 queueCtrl --> queueSvc
+queueCtrl --> sseSvc : "SSE Streams"
 adminCtrl --> patientSvc
 adminCtrl --> staffSvc
 userCtrl --> userSvc
@@ -138,6 +144,8 @@ notifCtrl --> notifSvc
 clinicCtrl --> clinicSvc
 doctorCtrl --> doctorSvc
 reportCtrl --> reportSvc
+reportCtrl --> sysReportSvc
+backupCtrl --> backupSvc
 
 ' Service to Repository Layer
 apptSvc --> apptRepo
@@ -151,6 +159,18 @@ userSvc --> userRepo
 clinicSvc --> clinicRepo
 doctorSvc --> doctorRepo
 notifSvc --> sendgrid : "Email API"
+backupSvc --> userRepo
+backupSvc --> patientRepo
+backupSvc --> staffRepo
+backupSvc --> doctorRepo
+backupSvc --> clinicRepo
+backupSvc --> apptRepo
+backupSvc --> queueRepo
+sseSvc --> queueSvc
+reportSvc --> apptRepo
+reportSvc --> queueRepo
+sysReportSvc --> apptRepo
+sysReportSvc --> queueRepo
 
 ' Repository to Database
 apptRepo --> db : "JPA/Hibernate\nJDBC"
@@ -181,6 +201,9 @@ note right of services
   - DTO Conversion
   - Queue Algorithm
   - Double-Booking Prevention
+  - Backup/Restore Operations
+  - Report Generation
+  - Real-time SSE Updates
 end note
 
 note right of repositories
@@ -206,6 +229,15 @@ note bottom of sendgrid
   - Your Turn Alert
 end note
 
+note top of backupSvc
+  Backup & Restore:
+  - Full System Backup (ZIP + JSON)
+  - Backup List & Details
+  - Restore from Backup
+  - Backup Download & Delete
+  - Stored in ./backups directory
+end note
+
 note bottom of supabaseAuth
   Authentication:
   - JWT Tokens
@@ -216,13 +248,13 @@ end note
 
 ' Legend
 legend bottom right
-  |= Layer |= Responsibility |
-  | Frontend | User Interface & Client-side Logic |
-  | Controllers | HTTP/REST API Endpoints |
-  | Services | Business Logic & Transactions |
-  | Repositories | Database Operations |
-  | Database | Data Persistence |
-  | External | Authentication & Email Services |
+  |= Layer |= Responsibility |= Key Features |
+  | Frontend | User Interface & Client-side Logic | React 19, Vite, Role-based Views |
+  | Controllers | HTTP/REST API Endpoints | 10 Controllers, Swagger Docs, SSE Support |
+  | Services | Business Logic & Transactions | 12 Services, Queue Algorithm, Backup System |
+  | Repositories | Database Operations | Spring Data JPA, Custom Queries |
+  | Database | Data Persistence | PostgreSQL, JOINED Inheritance, 8 Tables |
+  | External | Authentication & Email Services | Supabase Auth, SendGrid Email |
 endlegend
 
 @enduml
