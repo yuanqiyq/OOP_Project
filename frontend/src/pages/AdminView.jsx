@@ -7,12 +7,13 @@ import {
 	doctorAPI,
 	reportAPI,
 	appointmentAPI,
+	backupAPI,
 } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Toast from "../components/Toast";
-import BackupManagement from "../components/BackupManagement";
+import LoadingSpinner from "../components/LoadingSpinner";
 import {
 	PieChart,
 	Pie,
@@ -166,9 +167,25 @@ export default function AdminView() {
 	const [reportEndDate, setReportEndDate] = useState("");
 	const [generatingReport, setGeneratingReport] = useState(false);
 
+	// Backup management state
+	const [backups, setBackups] = useState([]);
+	const [backupLoading, setBackupLoading] = useState(false);
+	const [selectedBackup, setSelectedBackup] = useState(null);
+	const [backupDetails, setBackupDetails] = useState(null);
+	const [showBackupDetailsModal, setShowBackupDetailsModal] = useState(false);
+	const [showBackupConfirmDialog, setShowBackupConfirmDialog] = useState(false);
+	const [backupConfirmAction, setBackupConfirmAction] = useState(null);
+
 	useEffect(() => {
 		fetchAllData();
 	}, []);
+
+	// Load backups when settings view is active
+	useEffect(() => {
+		if (location.pathname.includes("/settings")) {
+			loadBackups();
+		}
+	}, [location.pathname]);
 
 	// Sync clinic search input with selected clinic (only when clinicId changes externally)
 	useEffect(() => {
@@ -1554,7 +1571,6 @@ export default function AdminView() {
 		if (location.pathname.includes("/clinics")) return "clinics";
 		if (location.pathname.includes("/doctors")) return "doctors";
 		if (location.pathname.includes("/reports")) return "reports";
-		if (location.pathname.includes("/backup")) return "backup";
 		if (location.pathname.includes("/settings")) return "settings";
 		return "dashboard";
 	};
@@ -1599,6 +1615,178 @@ export default function AdminView() {
 		} finally {
 			setGeneratingReport(false);
 		}
+	};
+
+	// Backup management functions
+	const loadBackups = async () => {
+		try {
+			setBackupLoading(true);
+			const data = await backupAPI.listBackups();
+			setBackups(data);
+		} catch (error) {
+			console.error("Failed to load backups:", error);
+			setToast({
+				message: "Failed to load backups: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+		}
+	};
+
+	const handleCreateBackup = async () => {
+		try {
+			setBackupLoading(true);
+			setToast({
+				message: "Creating backup...",
+				type: "success",
+			});
+			await backupAPI.createBackup();
+			setToast({
+				message: "Backup created successfully!",
+				type: "success",
+			});
+			await loadBackups();
+		} catch (error) {
+			console.error("Failed to create backup:", error);
+			setToast({
+				message: "Failed to create backup: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+		}
+	};
+
+	const handleViewBackupDetails = async (backup) => {
+		try {
+			setBackupLoading(true);
+			const details = await backupAPI.getBackupDetails(backup.fileName);
+			setBackupDetails(details);
+			setSelectedBackup(backup);
+			setShowBackupDetailsModal(true);
+		} catch (error) {
+			console.error("Failed to load backup details:", error);
+			setToast({
+				message: "Failed to load details: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+		}
+	};
+
+	const handleDownloadBackup = async (backup) => {
+		try {
+			setBackupLoading(true);
+			setToast({
+				message: "Downloading backup...",
+				type: "success",
+			});
+			const blob = await backupAPI.downloadBackup(backup.fileName);
+
+			// Create download link
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = backup.fileName;
+			document.body.appendChild(a);
+			a.click();
+			window.URL.revokeObjectURL(url);
+			document.body.removeChild(a);
+
+			setToast({
+				message: "Backup downloaded successfully!",
+				type: "success",
+			});
+		} catch (error) {
+			console.error("Failed to download backup:", error);
+			setToast({
+				message: "Failed to download backup: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+		}
+	};
+
+	const confirmBackupRestore = (backup) => {
+		setSelectedBackup(backup);
+		setBackupConfirmAction("restore");
+		setShowBackupConfirmDialog(true);
+	};
+
+	const confirmBackupDelete = (backup) => {
+		setSelectedBackup(backup);
+		setBackupConfirmAction("delete");
+		setShowBackupConfirmDialog(true);
+	};
+
+	const handleRestoreBackup = async () => {
+		if (!selectedBackup) return;
+
+		try {
+			setBackupLoading(true);
+			setShowBackupConfirmDialog(false);
+			setToast({
+				message: "Restoring backup... This may take a few minutes.",
+				type: "success",
+			});
+			await backupAPI.restoreBackup(selectedBackup.fileName);
+			setToast({
+				message: "Backup restored successfully! Please refresh the page.",
+				type: "success",
+			});
+			await loadBackups();
+		} catch (error) {
+			console.error("Failed to restore backup:", error);
+			setToast({
+				message: "Failed to restore backup: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+			setSelectedBackup(null);
+		}
+	};
+
+	const handleDeleteBackup = async () => {
+		if (!selectedBackup) return;
+
+		try {
+			setBackupLoading(true);
+			setShowBackupConfirmDialog(false);
+			await backupAPI.deleteBackup(selectedBackup.fileName);
+			setToast({
+				message: "Backup deleted successfully!",
+				type: "success",
+			});
+			await loadBackups();
+			if (backupDetails?.fileName === selectedBackup.fileName) {
+				setBackupDetails(null);
+			}
+		} catch (error) {
+			console.error("Failed to delete backup:", error);
+			setToast({
+				message: "Failed to delete backup: " + error.message,
+				type: "error",
+			});
+		} finally {
+			setBackupLoading(false);
+			setSelectedBackup(null);
+		}
+	};
+
+	const formatFileSize = (bytes) => {
+		if (bytes === 0) return "0 Bytes";
+		const k = 1024;
+		const sizes = ["Bytes", "KB", "MB", "GB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(k));
+		return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+	};
+
+	const formatBackupDate = (dateString) => {
+		return new Date(dateString).toLocaleString();
 	};
 
 	const currentView = getCurrentView();
@@ -4660,27 +4848,17 @@ export default function AdminView() {
 						</>
 					)}
 
-					{currentView === "backup" && (
-						<>
-							<div className="page-header">
-								<h1>Backup & Restore</h1>
-								<p className="subtitle">
-									Manage system data backups and restore points
-								</p>
-							</div>
-							<BackupManagement
-								showToast={(message, type) => setToast({ message, type })}
-							/>
-						</>
-					)}
-
 					{currentView === "settings" && (
 						<>
 							<div className="page-header">
 								<h1>Settings</h1>
 							</div>
+							
+							{/* Profile Information Section */}
 							<div className="section-card">
-								<h2>Profile Information</h2>
+								<div className="section-header">
+									<h2>Profile Information</h2>
+								</div>
 								<div className="settings-form">
 									<div className="form-group">
 										<label>Name</label>
@@ -4700,10 +4878,210 @@ export default function AdminView() {
 									</div>
 								</div>
 							</div>
+
+							{/* Backup & Restore Section */}
+							<div className="section-card">
+								<div className="section-header">
+									<h2>🗄️ Backup & Restore</h2>
+									<button
+										onClick={handleCreateBackup}
+										disabled={backupLoading}
+										className="btn btn-primary"
+									>
+										➕ Create New Backup
+									</button>
+								</div>
+
+								{backupLoading && <LoadingSpinner />}
+
+								{/* Backup List */}
+								<div className="backup-list-section">
+									<h3>Available Backups ({backups.length})</h3>
+
+									{backups.length === 0 ? (
+										<div className="empty-state">
+											<p>No backups found. Create your first backup to get started.</p>
+										</div>
+									) : (
+										<div className="backup-list">
+											{backups.map((backup) => (
+												<div
+													key={backup.fileName}
+													className={`backup-item ${
+														selectedBackup?.fileName === backup.fileName ? "selected" : ""
+													}`}
+												>
+													<div className="backup-item-header">
+														<div className="backup-item-info">
+															<h4>{backup.fileName}</h4>
+															<p className="backup-date">📅 {formatBackupDate(backup.createdDate)}</p>
+															<p className="backup-size">💾 {formatFileSize(backup.fileSize)}</p>
+														</div>
+													</div>
+
+													<div className="backup-item-actions">
+														<button
+															onClick={() => handleViewBackupDetails(backup)}
+															className="btn btn-secondary btn-sm"
+															title="View Details"
+														>
+															👁️ Details
+														</button>
+														<button
+															onClick={() => handleDownloadBackup(backup)}
+															className="btn btn-secondary btn-sm"
+															title="Download"
+														>
+															⬇️ Download
+														</button>
+														<button
+															onClick={() => confirmBackupRestore(backup)}
+															className="btn btn-warning btn-sm"
+															title="Restore"
+														>
+															♻️ Restore
+														</button>
+														<button
+															onClick={() => confirmBackupDelete(backup)}
+															className="btn btn-danger btn-sm"
+															title="Delete"
+														>
+															🗑️ Delete
+														</button>
+													</div>
+												</div>
+											))}
+										</div>
+									)}
+								</div>
+							</div>
 						</>
 					)}
 				</div>
 			</div>
+
+			{/* Backup Details Modal */}
+			{showBackupDetailsModal && backupDetails && (
+				<div className="modal-overlay" onClick={() => setShowBackupDetailsModal(false)}>
+					<div className="modal-content backup-details-modal" onClick={(e) => e.stopPropagation()}>
+						<div className="modal-header">
+							<h2>🗄️ Backup Details</h2>
+							<button
+								onClick={() => setShowBackupDetailsModal(false)}
+								className="modal-close"
+								title="Close"
+							>
+								✕
+							</button>
+						</div>
+						<div className="modal-body">
+							<div className="backup-details">
+								<div className="detail-row">
+									<span className="detail-label">File Name:</span>
+									<span className="detail-value">{backupDetails.fileName}</span>
+								</div>
+								<div className="detail-row">
+									<span className="detail-label">Created:</span>
+									<span className="detail-value">
+										{formatBackupDate(backupDetails.createdDate)}
+									</span>
+								</div>
+								<div className="detail-row">
+									<span className="detail-label">File Size:</span>
+									<span className="detail-value">
+										{formatFileSize(backupDetails.fileSize)}
+									</span>
+								</div>
+
+								{backupDetails.entityCounts && (
+									<>
+										<h4>Data Contents:</h4>
+										<div className="entity-counts">
+											{Object.entries(backupDetails.entityCounts).map(([entity, count]) => (
+												<div key={entity} className="entity-count-item">
+													<span className="entity-name">{entity.replace("_", " ")}:</span>
+													<span className="entity-count">{count} records</span>
+												</div>
+											))}
+										</div>
+									</>
+								)}
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Backup Confirmation Dialog */}
+			{showBackupConfirmDialog && (
+				<div className="modal-overlay" onClick={() => setShowBackupConfirmDialog(false)}>
+					<div className="modal-content confirm-modal" onClick={(e) => e.stopPropagation()}>
+						<div className="modal-header">
+							<h2>⚠️ Confirm {backupConfirmAction === "restore" ? "Restore" : "Delete"}</h2>
+							<button
+								onClick={() => setShowBackupConfirmDialog(false)}
+								className="modal-close"
+								title="Close"
+							>
+								✕
+							</button>
+						</div>
+						<div className="modal-body">
+							{backupConfirmAction === "restore" ? (
+								<>
+									<p className="confirm-message">
+										<strong>WARNING:</strong> Restoring this backup will{" "}
+										<strong>DELETE ALL CURRENT DATA</strong>
+										and replace it with the data from this backup.
+									</p>
+									<div className="info-row">
+										<span className="info-label">Backup:</span>
+										<span className="info-value">{selectedBackup?.fileName}</span>
+									</div>
+									<div className="info-row">
+										<span className="info-label">Created:</span>
+										<span className="info-value">
+											{selectedBackup ? formatBackupDate(selectedBackup.createdDate) : ""}
+										</span>
+									</div>
+									<p className="confirm-warning">
+										💡 It's recommended to create a current backup before restoring.
+									</p>
+								</>
+							) : (
+								<>
+									<p className="confirm-message">
+										Are you sure you want to delete this backup?
+									</p>
+									<div className="info-row">
+										<span className="info-label">Backup:</span>
+										<span className="info-value">{selectedBackup?.fileName}</span>
+									</div>
+									<p className="confirm-warning">This action cannot be undone.</p>
+								</>
+							)}
+
+							<div className="modal-actions">
+								<button
+									onClick={() => setShowBackupConfirmDialog(false)}
+									className="btn btn-secondary"
+								>
+									Cancel
+								</button>
+								<button
+									onClick={
+										backupConfirmAction === "restore" ? handleRestoreBackup : handleDeleteBackup
+									}
+									className={backupConfirmAction === "restore" ? "btn btn-warning" : "btn btn-danger"}
+									disabled={backupLoading}
+								>
+									{backupConfirmAction === "restore" ? "♻️ Restore" : "🗑️ Delete"}
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Doctor Configuration Modal */}
 			{showDoctorModal && selectedClinicForDoctors && (

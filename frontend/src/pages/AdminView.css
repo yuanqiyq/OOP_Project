@@ -2548,3 +2548,220 @@
     font-size: 0.85rem;
   }
 }
+
+/* Backup Management Styles */
+
+.backup-list-section h3 {
+  color: var(--teal-dark);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.backup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.backup-item {
+  background: #ffffff;
+  border: 2px solid rgba(78, 205, 196, 0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.08);
+}
+
+.backup-item:hover {
+  border-color: var(--teal-primary);
+  box-shadow: 0 4px 16px var(--teal-glow);
+  transform: translateY(-2px);
+}
+
+.backup-item.selected {
+  border-color: var(--teal-primary);
+  background: var(--gradient-glow);
+  box-shadow: 0 4px 16px var(--teal-glow);
+}
+
+.backup-item-header {
+  margin-bottom: 1rem;
+}
+
+.backup-item-info h4 {
+  margin: 0 0 0.5rem 0;
+  color: var(--teal-dark);
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+.backup-date,
+.backup-size {
+  margin: 0.25rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.backup-item-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Backup Details Modal */
+.backup-details-modal {
+  max-width: 700px;
+  width: 90%;
+}
+
+.backup-details-modal .modal-body {
+  max-height: calc(90vh - 200px);
+  overflow-y: auto;
+}
+
+.backup-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.backup-details .detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  transition: all 0.3s;
+}
+
+.backup-details .detail-row:hover {
+  background: var(--gradient-card);
+  border-color: var(--teal-primary);
+  box-shadow: 0 2px 8px rgba(78, 205, 196, 0.15);
+  transform: translateX(4px);
+}
+
+.backup-details .detail-label {
+  font-weight: 600;
+  color: var(--teal-dark);
+  font-size: 0.95rem;
+  min-width: 120px;
+}
+
+.backup-details .detail-value {
+  color: var(--teal-primary);
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  text-align: right;
+  word-break: break-all;
+}
+
+.backup-details h4 {
+  color: var(--teal-dark);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1.5rem 0 1rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid rgba(78, 205, 196, 0.2);
+}
+
+.entity-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.entity-count-item {
+  padding: 1.25rem;
+  background: var(--gradient-glow);
+  border-radius: 12px;
+  border: 1px solid rgba(78, 205, 196, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.entity-count-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--gradient-primary);
+  transform: scaleY(0);
+  transition: transform 0.3s;
+}
+
+.entity-count-item:hover {
+  background: var(--gradient-card);
+  border-color: var(--teal-primary);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(78, 205, 196, 0.2);
+}
+
+.entity-count-item:hover::before {
+  transform: scaleY(1);
+}
+
+.entity-name {
+  font-size: 0.85rem;
+  color: #666;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.entity-count {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--teal-primary);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+}
+
+.btn-warning:hover:not(:disabled) {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(255, 152, 0, 0.4);
+}
+
+@media (max-width: 768px) {
+  .backup-item-actions {
+    flex-direction: column;
+  }
+
+  .backup-item-actions .btn {
+    width: 100%;
+  }
+
+  .backup-details-modal {
+    width: 95%;
+    max-width: 95%;
+  }
+
+  .backup-details .detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .backup-details .detail-value {
+    text-align: left;
+  }
+
+  .entity-counts {
+    grid-template-columns: 1fr;
+  }
+}

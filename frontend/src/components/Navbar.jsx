@@ -113,7 +113,6 @@ export default function Navbar({ currentPage = "dashboard" }) {
 		{ id: "clinics", label: "Clinics", icon: "🏥", path: "/admin/clinics" },
 		{ id: "doctors", label: "Doctors", icon: "👨‍⚕️", path: "/admin/doctors" },
 		{ id: "reports", label: "Reports", icon: "📈", path: "/admin/reports" },
-		{ id: "backup", label: "Backup", icon: "🗄️", path: "/admin/backup" },
 		{ id: "settings", label: "Settings", icon: "⚙️", path: "/admin/settings" },
 	];
 
@@ -164,7 +163,6 @@ export default function Navbar({ currentPage = "dashboard" }) {
 						!currentPath.includes("/clinics") &&
 						!currentPath.includes("/doctors") &&
 						!currentPath.includes("/reports") &&
-						!currentPath.includes("/backup") &&
 						!currentPath.includes("/settings")))) ||
 			(item.id === "appointments" &&
 				(currentPath.startsWith("/patient/appointments") ||
