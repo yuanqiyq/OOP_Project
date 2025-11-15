@@ -1,0 +1,155 @@
+@startuml Backend_Architecture
+skinparam linetype ortho
+skinparam backgroundColor #fefefe
+
+title SingHealth Clinic - Backend Architecture
+
+package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
+
+    package "src/main/java/com/example/backend/controller/" {
+        component [QueueController] as QC
+        component [AppointmentController] as AC
+        component [AdminController] as AdminC
+        component [ClinicController] as CC
+        component [DoctorController] as DC
+        component [NotificationController] as NC
+        component [UserController] as UC
+        component [HealthController] as HC
+        component [ReportController] as RC
+        component [BackupController] as BC
+        component [SystemUsageReportController] as SRC
+    }
+
+
+    package "src/main/java/com/example/backend/service/" {
+        component [QueueService] as QS
+        component [AppointmentService] as AS
+        component [ClinicService] as CS
+        component [DoctorService] as DS
+        component [NotificationService] as NS
+        component [PatientService] as PS
+        component [StaffService] as SS
+        component [UserService] as US
+        component [ReportService] as RS
+        component [SystemUsageReportService] as SRS
+        component [BackupService] as BS
+        component [QueueSseService] as SSE
+    }
+
+
+    package "src/main/java/com/example/backend/repo/" {
+        component [QueueRepository] as QR
+        component [AppointmentRepository] as AR
+        component [ClinicRepository] as CR
+        component [DoctorRepository] as DR
+        component [PatientRepository] as PR
+        component [StaffRepository] as SR
+        component [UserRepository] as UR
+    }
+
+
+    package "src/main/java/com/example/backend/model/" {
+        component [User] as User
+        component [Patient] as Patient
+        component [Staff] as Staff
+        component [Doctor] as Doctor
+        component [Clinic] as Clinic
+        component [Appointment] as Appointment
+        component [QueueLog] as QueueLog
+    }
+
+
+    package "src/main/java/com/example/backend/config/" {
+        component [SwaggerConfig] as SC
+        component [SendGridConfig] as SGC
+    }
+}
+
+
+package "External Integration" {
+    component [SendGrid API] as SG
+    component [Supabase Auth] as SA
+}
+
+
+storage "PostgreSQL Database\n(Supabase)" as DB
+
+QC --> QS
+AC --> AS
+AdminC --> PS
+AdminC --> SS
+CC --> CS
+DC --> DS
+NC --> NS
+UC --> US
+RC --> RS
+RC --> SRS
+SRC --> SRS
+BC --> BS
+QC --> SSE
+
+QS --> QR
+AS --> AR
+CS --> CR
+DS --> DR
+PS --> PR
+SS --> SR
+US --> UR
+RS --> AR
+RS --> QR
+SRS --> AR
+SRS --> QR
+BS --> PR
+BS --> SR
+BS --> AR
+BS --> QR
+SSE --> QS
+
+QR --> DB
+AR --> DB
+CR --> DB
+DR --> DB
+PR --> DB
+SR --> DB
+UR --> DB
+
+NS --> SG
+SA --> DB
+
+note right of QC
+  HTTP Requests
+  @RestController
+  /api/queue
+end note
+
+note right of QS
+  Business Rules
+  Transactions
+  @Service
+end note
+
+note right of QR
+  JPA Queries
+  @Repository
+  Spring Data
+end note
+
+note right of User
+  JOINED Inheritance
+  Base entity for
+  Patient & Staff
+end note
+
+
+legend bottom right
+  |= Component |= Count |= Details |
+  | Controllers | 11 | REST endpoints, HTTP handling |
+  | Services | 12 | Business logic, transactions |
+  | Repositories | 7 | Spring Data JPA access |
+  | Models | 7 | JPA entities, inheritance |
+  | Config | 2 | Swagger, SendGrid setup |
+  | External | 2 | SendGrid API, Supabase Auth |
+  | Database | 1 | PostgreSQL (Supabase, AWS SG) |
+endlegend
+
+@enduml

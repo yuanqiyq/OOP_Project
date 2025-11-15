@@ -640,7 +640,13 @@ package "Controller Layer" <<Rectangle>> {
         + generateSystemUsageReport(LocalDate, LocalDate): ResponseEntity<byte[]>
         + generateDailyReport(Long, LocalDate): ResponseEntity<byte[]>
     }
-    
+
+    class SystemUsageReportController {
+        - systemUsageReportService: SystemUsageReportService
+        __
+        + generateSystemUsageReport(LocalDate, LocalDate): ResponseEntity<byte[]>
+    }
+
     class HealthController {
         __
         + healthCheck(): ResponseEntity<Map<String, String>>
@@ -718,6 +724,7 @@ DoctorController --> DoctorService : uses
 NotificationController --> NotificationService : uses
 BackupController --> BackupService : uses
 ReportController --> ReportService : uses
+SystemUsageReportController --> SystemUsageReportService : uses
 
 ' Repository extends JpaRepository
 AppointmentRepository --|> JpaRepository

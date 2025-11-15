@@ -1,0 +1,164 @@
+@startuml Frontend_Architecture
+skinparam linetype ortho
+skinparam backgroundColor #fefefe
+
+title SingHealth Clinic - Frontend Architecture
+
+package "src/pages/" {
+    component [PatientView.jsx] as PV
+    component [PatientProfile.jsx] as PP
+    component [StaffView.jsx] as SV
+    component [StaffDisplay.jsx] as SD
+    component [AdminView.jsx] as AV
+    component [AuthPage.jsx] as AP
+    component [UnauthorizedPage.jsx] as UP
+}
+
+
+package "src/components/" {
+    component [Navbar.jsx] as NB
+    component [ProtectedRoute.jsx] as PR
+    component [Toast.jsx] as TS
+    component [LoadingSpinner.jsx] as LS
+    component [BackupManagement.jsx] as BM
+}
+
+
+package "src/contexts/" {
+    component [AuthContext.jsx] as AC
+}
+
+
+package "src/lib/" {
+    component [api.js\n(HTTP Client)] as API
+    component [supabase.js\n(Auth Client)] as SUP
+    component [supabaseAdmin.js\n(Admin Client)] as SUPA
+}
+
+
+package "src/App.jsx" {
+    component [BrowserRouter] as BR
+    component [Route Config] as RC
+}
+
+
+package "External Services" {
+    component [Supabase Auth\n(JWT)] as SA
+    component [Backend API\n(Spring Boot)] as BACKEND
+}
+
+
+database "PostgreSQL\n(Supabase)" as DB
+
+' Pages to Shared Components
+PV --> AC
+PV --> PR
+PV --> NB
+PV --> TS
+PV --> LS
+PP --> AC
+PP --> NB
+PP --> TS
+SV --> AC
+SV --> PR
+SV --> NB
+SV --> TS
+SV --> LS
+SV --> BM
+SD --> AC
+SD --> NB
+SD --> LS
+AV --> AC
+AV --> PR
+AV --> NB
+AV --> TS
+AV --> LS
+AV --> BM
+AP --> TS
+
+' Shared Components to API
+AC --> SUP
+AC --> SUPA
+NB --> AC
+PR --> AC
+BM --> API
+
+' Pages to API
+PV --> API
+PP --> API
+SV --> API
+SD --> API
+AV --> API
+
+' Routing
+BR --> RC
+RC --> AP
+RC --> PV
+RC --> PP
+RC --> SV
+RC --> SD
+RC --> AV
+RC --> UP
+
+' API to Backend
+API --> BACKEND
+SUP --> SA
+SUPA --> BACKEND
+
+' Backend to Database
+BACKEND --> DB
+SA --> DB
+
+note right of PV
+  Patient Dashboard
+  Appointments
+  Queue Check-in
+  Real-time Tracking (SSE)
+  Medical History
+end note
+
+note right of SV
+  Queue Management
+  Patient Check-in
+  Doctor Management
+  Daily Reports
+end note
+
+note right of SD
+  Public Display
+  Current Patient
+  Waiting Queue
+  Missed Patients
+end note
+
+note right of AV
+  System Analytics
+  User Management
+  Clinic Configuration
+  Backup & Restore
+end note
+
+note right of AC
+  Global Auth State
+  User Context
+  Session Management
+end note
+
+note right of API
+  Centralized HTTP
+  Request/Response
+  Error Handling
+  Base URL Config
+end note
+
+legend bottom right
+  |= Component |= Count |= Technology |
+  | Pages | 7 | React Components |
+  | Shared Components | 6 | React + Context |
+  | API Clients | 3 | Fetch API |
+  | Routing | 2 | React Router v7 |
+  | Framework | 1 | React 19, Vite |
+  | External | 2 | Supabase, Backend |
+endlegend
+
+@enduml

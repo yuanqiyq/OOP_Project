@@ -1,0 +1,158 @@
+@startuml SingHealth_ER_Diagram
+skinparam linetype ortho
+skinparam backgroundColor #fefefe
+
+title SingHealth Clinic - Entity Relationship Diagram
+
+class USER_BASE {
+  user_id: bigint <<PK>>
+  --
+  auth_uuid: uuid
+  email: varchar
+  fname: varchar
+  lname: varchar
+  role: varchar
+  created_at: timestamp
+}
+
+class PATIENT {
+  patient_id: bigint <<PK>>
+  patient_ic: varchar <<UNIQUE>>
+  --
+  date_of_birth: date
+  gender: varchar
+  blood_type: varchar
+  medical_history: text
+  allergies: text
+  emergency_contact: varchar
+  emergency_contact_phone: varchar
+  created_at: timestamp
+}
+
+class STAFF {
+  staff_id: bigint <<PK>>
+  clinic_id: bigint <<FK>>
+  --
+  created_at: timestamp
+}
+
+class CLINIC {
+  id: bigint <<PK>>
+  --
+  name: varchar
+  address: varchar
+  region: varchar
+  area: varchar
+  specialty: varchar
+  clinic_type: varchar
+  telephone_no: varchar
+  pcn: varchar
+  ihp_clinic_id: varchar
+  appt_interval_min: bigint
+  --
+  mon_fri_am_start: time
+  mon_fri_am_end: time
+  mon_fri_pm_start: time
+  mon_fri_pm_end: time
+  mon_fri_night_start: time
+  mon_fri_night_end: time
+  sat_am_start: time
+  sat_am_end: time
+  sat_pm_start: time
+  sat_pm_end: time
+  sat_night_start: time
+  sat_night_end: time
+  sun_am_start: time
+  sun_am_end: time
+  sun_pm_start: time
+  sun_pm_end: time
+  sun_night_start: time
+  sun_night_end: time
+  ph_am_start: time
+  ph_am_end: time
+  ph_pm_start: time
+  ph_pm_end: time
+  ph_night_start: time
+  ph_night_end: time
+  --
+  created_at: timestamp
+  updated_at: timestamp
+}
+
+class DOCTOR {
+  id: bigint <<PK>>
+  assigned_clinic: bigint <<FK>>
+  --
+  fname: varchar
+  lname: varchar
+  shift_days: jsonb
+  created_at: timestamp
+}
+
+class APPOINTMENT {
+  appointment_id: bigint <<PK>>
+  patient_id: bigint <<FK>>
+  clinic_id: bigint <<FK>>
+  doctor_id: bigint <<FK>>
+  --
+  date_time: timestamp
+  appt_status: varchar
+  treatment_summary: text
+  created_at: timestamp
+}
+
+class QUEUE_LOG {
+  queue_id: bigint <<PK>>
+  clinic_id: bigint <<FK>>
+  appointment_id: bigint <<FK>>
+  --
+  status: varchar
+  priority: integer
+  created_at: timestamp
+  appointment_start: timestamp
+}
+
+PATIENT --|> USER_BASE : extends (JOINED)
+STAFF --|> USER_BASE : extends (JOINED)
+STAFF }o--|| CLINIC : assigned_to
+DOCTOR }o--|| CLINIC : works_at
+APPOINTMENT }o--|| PATIENT : booked_by
+APPOINTMENT }o--|| CLINIC : at
+APPOINTMENT }o--o| DOCTOR : with
+QUEUE_LOG }o--|| CLINIC : in
+QUEUE_LOG }o--|| APPOINTMENT : tracks
+
+note right of USER_BASE
+  **JOINED Inheritance**
+  patient_id and staff_id
+  are FKs to user.user_id
+end note
+
+note right of QUEUE_LOG
+  **Priority Levels**
+  1 = NORMAL
+  2 = ELDERLY
+  3 = EMERGENCY
+
+  **Queue Status**
+  IN_QUEUE -> CALLED -> DONE/MISSED
+end note
+
+note right of CLINIC
+  **Operating Hours**
+  Mon-Fri (AM, PM, Night)
+  Sat (AM, PM, Night)
+  Sun (AM, PM, Night)
+  PH (AM, PM, Night)
+end note
+
+legend right
+  | Symbol | Meaning |
+  | <<PK>> | Primary Key |
+  | <<FK>> | Foreign Key |
+  | --|> | Inheritance |
+  | }o--|| | Many-to-One |
+  | }o--o| | Optional Relation |
+endlegend
+
+@enduml

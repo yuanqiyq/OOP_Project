@@ -13,42 +13,68 @@ actor Admin as admin
 
 ' Frontend Layer
 package "Frontend Layer\n(React 19 + Vite)" {
-    component "Patient View" as patientView {
-        [Appointment Booking]
-        [Queue Check-in]
-        [Profile Management]
+
+    package "src/pages/" {
+        component "PatientView.jsx" as patientView {
+            [Appointment Booking]
+            [Queue Check-in]
+            [Profile Management]
+        }
+
+        component "StaffView.jsx" as staffView {
+            [Queue Management]
+            [Appointment Tracking]
+            [Patient Check-in]
+            [Doctor Management]
+            [Daily Reports]
+        }
+
+        component "StaffDisplay.jsx" as staffDisplay {
+            [Currently Serving Patient Display]
+            [Waiting Queue List]
+            [Missed Patients List]
+            [Auto-refresh (5s)]
+        }
+
+        component "AdminView.jsx" as adminView {
+            [User Management]
+            [System Reports]
+            [Clinic Configuration]
+            [Backup & Restore]
+        }
+
+        component "AuthPage.jsx" as authPage {
+            [Sign In]
+            [Sign Up]
+        }
     }
-    
-    component "Staff View" as staffView {
-        [Queue Management]
-        [Appointment Tracking]
-        [Patient Check-in]
+
+
+    package "src/components/" {
+        component "Navbar.jsx" as navbar
+        component "ProtectedRoute.jsx" as protectedRoute
+        component "Toast.jsx" as toast
+        component "LoadingSpinner.jsx" as spinner
+        component "BackupManagement.jsx" as backup
     }
-    
-    component "Admin View" as adminView {
-        [User Management]
-        [System Reports]
-        [Clinic Configuration]
-        [Backup & Restore]
+
+
+    package "src/contexts/" {
+        component "AuthContext.jsx" as authContext
     }
-    
-    component "Shared Components" as shared {
-        [AuthContext]
-        [ProtectedRoute]
-        [Navbar]
-        [Toast Notifications]
-    }
-    
-    component "API Layer" as apiLayer {
-        [api.js - Centralized HTTP Client]
+
+
+    package "src/lib/" {
+        component "api.js\n(HTTP Client)" as apiLayer
+        component "supabase.js\n(Auth Client)" as supabaseClient
+        component "supabaseAdmin.js\n(Admin Client)" as supabaseAdmin
     }
 }
 
 ' Backend Layer
 package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
-    
-    ' Presentation Layer
-    package "Presentation Layer\n(Controllers)" as controllers {
+
+    package "src/main/java/com/example/backend/controller/" as controllers {
         [AppointmentController] as apptCtrl
         [QueueController] as queueCtrl
         [AdminController] as adminCtrl
@@ -59,10 +85,10 @@ package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
         [ReportController] as reportCtrl
         [BackupController] as backupCtrl
         [HealthController] as healthCtrl
+        [SystemUsageReportController] as sysReportCtrl
     }
-    
-    ' Business Logic Layer
-    package "Business Logic Layer\n(Services)" as services {
+
+    package "src/main/java/com/example/backend/service/" as services {
         [AppointmentService] as apptSvc
         [QueueService] as queueSvc
         [NotificationService] as notifSvc
@@ -76,9 +102,8 @@ package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
         [QueueSseService] as sseSvc
         [SystemUsageReportService] as sysReportSvc
     }
-    
-    ' Data Access Layer
-    package "Data Access Layer\n(Repositories)" as repositories {
+
+    package "src/main/java/com/example/backend/repo/" as repositories {
         [AppointmentRepository] as apptRepo
         [QueueRepository] as queueRepo
         [PatientRepository] as patientRepo
@@ -87,9 +112,18 @@ package "Backend Layer\n(Spring Boot 3.5.6 + Java 21)" {
         [ClinicRepository] as clinicRepo
         [DoctorRepository] as doctorRepo
     }
-    
-    ' Configuration
-    package "Configuration" as config {
+
+    package "src/main/java/com/example/backend/model/" as models {
+        [User]
+        [Patient]
+        [Staff]
+        [Doctor]
+        [Clinic]
+        [Appointment]
+        [QueueLog]
+    }
+
+    package "src/main/java/com/example/backend/config/" as config {
         [SwaggerConfig]
         [SendGridConfig]
     }
@@ -121,14 +155,42 @@ staff --> staffView
 admin --> adminView
 
 ' Frontend Internal Connections
-patientView --> shared
-staffView --> shared
-adminView --> shared
+patientView --> authContext
+patientView --> protectedRoute
+patientView --> navbar
+patientView --> toast
+patientView --> spinner
+staffView --> authContext
+staffView --> protectedRoute
+staffView --> navbar
+staffView --> toast
+staffView --> spinner
+staffView --> backup
+adminView --> authContext
+adminView --> protectedRoute
+adminView --> navbar
+adminView --> toast
+adminView --> spinner
+adminView --> backup
+staffDisplay --> authContext
+staffDisplay --> navbar
+staffDisplay --> spinner
+authPage --> toast
+authContext --> supabaseClient
+authContext --> supabaseAdmin
+navbar --> authContext
+protectedRoute --> authContext
+backup --> apiLayer
+
+' Frontend Pages to API
 patientView --> apiLayer
 staffView --> apiLayer
 adminView --> apiLayer
-shared --> apiLayer
-shared --> supabaseAuth : "Auth Requests"
+staffDisplay --> apiLayer
+authPage --> apiLayer
+
+' Shared Components to API
+authContext --> supabaseClient : "Auth Requests"
 
 ' Frontend to Backend
 apiLayer --> controllers : "HTTP/REST\n/api/*\nPort 8080"
@@ -145,6 +207,7 @@ clinicCtrl --> clinicSvc
 doctorCtrl --> doctorSvc
 reportCtrl --> reportSvc
 reportCtrl --> sysReportSvc
+sysReportCtrl --> sysReportSvc
 backupCtrl --> backupSvc
 
 ' Service to Repository Layer
@@ -246,11 +309,20 @@ note bottom of supabaseAuth
   - Password Reset
 end note
 
+note right of staffDisplay
+  Public Queue Display:
+  - Large format for clinic waiting area (TV/Monitor)
+  - Currently serving patient display
+  - Real-time waiting queue list
+  - Missed patients list
+  - Auto-refresh every 5 seconds
+end note
+
 ' Legend
 legend bottom right
   |= Layer |= Responsibility |= Key Features |
   | Frontend | User Interface & Client-side Logic | React 19, Vite, Role-based Views |
-  | Controllers | HTTP/REST API Endpoints | 10 Controllers, Swagger Docs, SSE Support |
+  | Controllers | HTTP/REST API Endpoints | 11 Controllers, Swagger Docs, SSE Support |
   | Services | Business Logic & Transactions | 12 Services, Queue Algorithm, Backup System |
   | Repositories | Database Operations | Spring Data JPA, Custom Queries |
   | Database | Data Persistence | PostgreSQL, JOINED Inheritance, 8 Tables |
